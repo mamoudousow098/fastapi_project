@@ -337,6 +337,12 @@ class MovementCheckerService:
             
             execution_bo.accounts[role] = account
         
+        if(len(execution_bo.accounts) == 0) :
+            raise BrokerException(
+                    "Accounts not found",
+                    code="ACCOUNTS_NOT_FOUND"
+                )
+
         logger.info(f"Total accounts loaded: {len(execution_bo.accounts)}")
         return execution_bo
     
