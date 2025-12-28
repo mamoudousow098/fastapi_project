@@ -46,7 +46,7 @@ class Account(AbstractAttributEntity):
     identification_system: Mapped[str | None] = mapped_column(String)
     identification_number: Mapped[str | None] = mapped_column(String)
     devise: Mapped[str | None] = mapped_column(String)
-    RCCM_client_number: Mapped[str | None] = mapped_column(String)
+    rccm_client_number: Mapped[str | None] = mapped_column(String)
     overdraft_activated: Mapped[bool | None] = mapped_column(Boolean)
 
     # Self reference ManyToOne (parent account)
@@ -76,7 +76,7 @@ class Account(AbstractAttributEntity):
     # --- Arrays / Sets ---
     kyc_levels: Mapped[list[str] | None] = mapped_column(ARRAY(String))
 
-    EME_account_number: Mapped[str | None] = mapped_column(String)
+    eme_account_number: Mapped[str | None] = mapped_column(String)
     principal_distri_account_number: Mapped[str | None] = mapped_column(String)
 
     provider_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("provider.id"))

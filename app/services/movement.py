@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
-from app.models.movement import Movement, HistoryMvtStatus
+from app.models.movement import Movement
+from app.models.history_mvt_status import HistoryMvtStatus
 from app.models.enums import StatusEnum
 from app.repositories.movement import MovementRepository
 

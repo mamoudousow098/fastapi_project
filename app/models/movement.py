@@ -114,11 +114,3 @@ class Movement(AbstractAttributEntity):
     cancel_operations: Mapped[dict | None] = mapped_column(JSON)
     account_roles: Mapped[dict | None] = mapped_column(JSON)
     additional_informations: Mapped[dict | None] = mapped_column(JSON)
-
-    # Relationship to operations (if you want to link them directly)
-    # operations: Mapped[list["Operation"]] = relationship(
-    #     "Operation",
-    #     foreign_keys="[Operation.gu_id]",
-    #     primaryjoin="Movement.gu_id == Operation.gu_id",
-    #     back_populates="movement"
-    # )

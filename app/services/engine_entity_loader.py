@@ -140,6 +140,7 @@ class EngineEntityLoaderService:
             logger.error(f"Error retrieving active flow: {e}", exc_info=True)
             raise ValueError("Flow not found")
     
+
     def get_account_by_account_number_or_phone_or_merchant(
         self,
         account_identifier: str,
@@ -179,20 +180,21 @@ class EngineEntityLoaderService:
                 
                 return accounts[0]
             
-            # 2. Check if it's a merchant code
-            if re.match(MERCHANT_CODE_REGEX, account_identifier):
+            # 2. Check if it's a merchant code (must start with #)
+            elif account_identifier.startswith("#") and re.match(MERCHANT_CODE_REGEX, account_identifier):
                 merchant_code = account_identifier.replace("#", "")
                 logger.info(f"Searching for account with merchant code: {merchant_code}")
                 return self.account_repo.find_by_merchant_code(merchant_code, deleted=False)
             
             # 3. Default: search by account number
-            logger.info(f"Searching for account with account number: {account_identifier}")
-            return self.account_repo.find_by_account_number(account_identifier, deleted=False)
+            else:
+                logger.info(f"Searching for account with account number: {account_identifier}")
+                return self.account_repo.find_by_account_number(account_identifier, deleted=False)
             
         except Exception as e:
             logger.error(f"Error retrieving account {account_identifier}: {e}", exc_info=True)
             raise ValueError("Account not found")
-    
+
     def get_account_by_identifier_or_alias(
         self,
         account_identifier: str,

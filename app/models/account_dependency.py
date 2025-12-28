@@ -2,7 +2,7 @@ from datetime import datetime
 from sqlalchemy import String, Integer, Boolean, Enum, Index, Text, Float, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import AbstractAttributEntity
+from app.models.base import AbstractAttributEntity, Base
 from app.models.enums import AccountCategory, AccountPrefix
 
 # --- ENTITIES ---
@@ -75,7 +75,7 @@ class Provider(AbstractAttributEntity):
     accounts: Mapped[list["Account"]] = relationship("Account", back_populates="provider")
 
 
-class Balance(AbstractAttributEntity):
+class Balance(Base):
     __tablename__ = "balance"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

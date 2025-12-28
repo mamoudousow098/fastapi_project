@@ -1,4 +1,6 @@
 from datetime import datetime
+from typing import Dict, Any
+
 from sqlalchemy import String, Integer, Float, DateTime, Enum, Index, UniqueConstraint, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -74,3 +76,75 @@ class Operation(Base):
     #     primaryjoin="Operation.gu_id == Movement.gu_id",
     #     back_populates="operations"
     # )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert Operation object to dictionary for JSON serialization
+
+        Returns:
+            Dictionary representation of the operation
+        """
+        return {
+            "id": self.id,
+            "amount": self.amount,
+            "balance_before": self.balance_before,
+            "balance_after": self.balance_after,
+            "account_number": self.account_number,
+            "account_label": self.account_label,
+            "super_account_number": self.super_account_number,
+            "account_role": self.account_role,
+            "gu_id": self.gu_id,
+            "balance_id": self.balance_id,
+            "operation_direction": self.operation_direction.value if self.operation_direction else None,
+            "op_date": self.op_date.isoformat() if self.op_date else None,
+            "legal_entity_code": self.legal_entity_code,
+            "product_code": self.product_code,
+            "global_commission": self.global_commission,
+            "global_fees": self.global_fees,
+            "issuer_commissions": self.issuer_commissions,
+            "acquirer_commissions": self.acquirer_commissions,
+            "issuer_fees": self.issuer_fees,
+            "acquirer_fees": self.acquirer_fees,
+            "impact_rule_code": self.impact_rule_code,
+            "user_login": self.user_login,
+            "partner_dist_id": self.partner_dist_id,
+            "partner_id": self.partner_id,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Operation":
+        """
+        Create Operation object from dictionary
+
+        Args:
+            data: Dictionary containing operation data
+
+        Returns:
+            Operation instance
+        """
+        operation = cls()
+
+        # Simple fields
+        for field in [
+            "id", "amount", "balance_before", "balance_after",
+            "account_number", "account_label", "super_account_number", "account_role",
+            "gu_id", "balance_id", "legal_entity_code", "product_code",
+            "global_commission", "global_fees", "issuer_commissions", "acquirer_commissions",
+            "issuer_fees", "acquirer_fees", "impact_rule_code",
+            "user_login", "partner_dist_id", "partner_id"
+        ]:
+            if field in data:
+                setattr(operation, field, data[field])
+
+        # Handle enum
+        if "operation_direction" in data and data["operation_direction"]:
+            operation.operation_direction = OperationDirection(data["operation_direction"])
+
+        # Handle datetime
+        if "op_date" in data and data["op_date"]:
+            if isinstance(data["op_date"], str):
+                operation.op_date = datetime.fromisoformat(data["op_date"])
+            else:
+                operation.op_date = data["op_date"]
+
+        return operation

@@ -8,6 +8,7 @@ from typing import Dict, Optional, Any, Set
 from datetime import datetime
 from sqlalchemy.orm import Session
 
+from app.models import ImpactRule, Interval, Operation
 from app.models.movement import Movement
 from app.models.service import Service
 from app.models.account import Account
@@ -23,6 +24,7 @@ from app.schemas.financial.movement import (
     ResponseDetails
 )
 from app.services.engine_entity_loader import EngineEntityLoaderService
+from app.services.operation_creation import OperationCreationService
 
 # Configure logger
 logging.basicConfig(
@@ -69,6 +71,7 @@ class MovementCheckerService:
         self.db = db
         self.logger = logger
         self.engine_entity_loader_service = EngineEntityLoaderService(db)
+        self.operation_creation_service = OperationCreationService(db)
     
     def launch_check(self, execution_bo: Dict[str, Any]) -> MovementExecutionBO:
         """Launch all checks for a movement transaction"""
@@ -302,7 +305,7 @@ class MovementCheckerService:
             account = execution_bo.accounts.get(role)
             
             if not account:
-                account = self.engine_entity_loader_service.get_account_by_identifier_or_alias(
+                account = self.engine_entity_loader_service.get_account_by_account_number_or_phone_or_merchant(
                     identifier, execution_bo.service
                 )
             
@@ -634,18 +637,20 @@ class MovementCheckerService:
         logger.info(f"Checking constraints: {context}")
         pass
     
-    def compute_global_amounts_for_each_rule(self, execution_bo: MovementExecutionBO) -> None:
-        """Compute global amounts"""
-        logger.info("Computing global amounts")
-        pass
-    
-    def check_for_impact_rules(
-        self, execution_bo: MovementExecutionBO, save_operations: bool = True
-    ) -> None:
-        """Check impact rules"""
-        logger.info("Checking impact rules")
-        pass
-    
+    # def compute_global_amounts_for_each_rule(self, execution_bo: MovementExecutionBO) -> None:
+    #     """Compute global amounts"""
+    #     logger.info("Computing global amounts")
+    #     pass
+    #
+    # def check_for_impact_rules(
+    #     self, execution_bo: MovementExecutionBO, save_operations: bool = True
+    # ) -> None:
+    #     """Check impact rules"""
+    #     logger.info("Checking impact rules")
+    #     pass
+
+
+
     def check_for_client(self, execution_bo: MovementExecutionBO) -> None:
         """Check client"""
         logger.info("Checking client")
@@ -670,15 +675,39 @@ class MovementCheckerService:
             execution_bo.movement.issuer_fees = getattr(execution_bo, 'issuer_fees', 0)
             execution_bo.movement.acquirer_fees = getattr(execution_bo, 'acquirer_fees', 0)
     
-    def create_and_save_movement(self, execution_bo: MovementExecutionBO) -> None:
-        """Save movement"""
+    # def create_and_save_movement(self, execution_bo: MovementExecutionBO) -> None:
+    #     """Save movement"""
+    #     logger.info("Saving movement")
+    #     if not execution_bo.movement:
+    #         execution_bo.movement = self.build_movement(execution_bo)
+    #
+    #     self.db.add(execution_bo.movement)
+    #     self.db.commit()
+    #     self.db.refresh(execution_bo.movement)
+
+    def create_and_save_movement(self, bo: MovementExecutionBO):
+        """Create and save movement"""
         logger.info("Saving movement")
-        if not execution_bo.movement:
-            execution_bo.movement = self.build_movement(execution_bo)
-        
-        self.db.add(execution_bo.movement)
+
+        # Convert Operation objects to dictionaries for JSON serialization
+        if bo.movement.load_operations:
+            bo.movement.load_operations = [
+                op.to_dict() if isinstance(op, Operation) else op
+                for op in bo.movement.load_operations
+            ]
+
+        if bo.movement.cancel_operations:
+            bo.movement.cancel_operations = [
+                op.to_dict() if isinstance(op, Operation) else op
+                for op in bo.movement.cancel_operations
+            ]
+
+        # Save the movement
+        self.db.add(bo.movement)
         self.db.commit()
-        self.db.refresh(execution_bo.movement)
+        self.db.refresh(bo.movement)
+
+        logger.info(f"Movement saved with ID: {bo.movement.id}")
     
     def build_movement(self, execution_bo: MovementExecutionBO) -> Movement:
         """Build movement entity"""
@@ -715,7 +744,7 @@ class MovementCheckerService:
         
         execution_bo.response_details = ResponseDetails(
             code=exception.code,
-            message=exception.message,
+            message=exception.message + " " + exception.context,
             is_error=True
         )
         
@@ -740,3 +769,276 @@ class MovementCheckerService:
         """Generate UUID"""
         import uuid
         return str(uuid.uuid4())
+
+    def compute_global_amounts_for_each_rule(self, execution_bo: MovementExecutionBO) -> None:
+        """
+        Compute global amounts for each rule in the movement execution business object
+        """
+        logger.info("Computing global amounts for each rule")
+        self.operation_creation_service.compute_global_operations_amount_for_each_rule(execution_bo)
+
+
+    def check_impact_rule_for_interval_and_account(
+            self,
+            execution_bo: MovementExecutionBO,
+            rule: ImpactRule,
+            save_operations: bool = True
+    ) -> None:
+        """
+        Check impact rule for interval and account
+
+        Args:
+            execution_bo: Movement execution business object
+            rule: Impact rule to check
+            save_operations: Whether to save operations to movement
+
+        Raises:
+            BrokerException: If no interval found or no matching interval
+        """
+        # Check if rule has intervals
+        if rule.intervals is None or len(rule.intervals) == 0:
+            raise BrokerException("NO_INTERVAL_RULE_FOUND")
+
+        # Initialize total amount to support by account if needed
+        if execution_bo.total_amount_to_support_by_account is None:
+            execution_bo.total_amount_to_support_by_account = {}
+
+        # Get the amount to check
+        amount = execution_bo.request.amount
+        if execution_bo.movement is not None:
+            amount = execution_bo.movement.amount
+
+        logger.info(f"Intervals: {rule.intervals}")
+
+        # Check each interval
+        for interval in rule.intervals:
+            # Check if the amount is within the interval
+            if interval.can_interval_support_amount(amount):
+                # Get the account for this rule's role
+                role_identifier = rule.rule_account_role.role_identifier
+                account = execution_bo.accounts.get(role_identifier)
+
+                # Check if the account can support the negative amount
+                self.check_if_account_can_support_rule(
+                    interval,
+                    account,
+                    rule.rule_account_role,
+                    execution_bo
+                )
+
+                # Save the operation in the movement if save_operations is True
+                if save_operations is True:
+                    operation = self.operation_creation_service.build_operation(
+                        execution_bo,
+                        rule,
+                        interval
+                    )
+                    execution_bo.movement.load_operations.append(operation)
+
+                return
+
+        # No matching interval found
+        movement_amount = execution_bo.movement.amount if execution_bo.movement else amount
+        raise BrokerException(
+           "NO_MATCHING_INTERVAL_RULE_FOUND",
+            f"{rule.code}|{movement_amount}"
+        )
+
+
+    def check_for_impact_rules(
+            self,
+            execution_bo: MovementExecutionBO,
+            save_operations: bool = True
+    ) -> MovementExecutionBO:
+        """
+        Check all impact rules for the flow
+
+        Args:
+            execution_bo: Movement execution business object
+            save_operations: Whether to save operations to movement
+
+        Returns:
+            Updated execution_bo
+
+        Raises:
+            BrokerException: If no impact rules found
+        """
+        logger.info("Checking impact rules")
+
+        # Check if flow has rules
+        if execution_bo.flow.rules is None or len(execution_bo.flow.rules) == 0:
+            raise BrokerException("NO_IMPACT_RULE_FOUND")
+
+        # Initialize load operations if needed
+        if execution_bo.movement.load_operations is None:
+            execution_bo.movement.load_operations = []
+
+        # Initialize total amount to support by account
+        execution_bo.total_amount_to_support_by_account = {}
+
+        # Check each impact rule
+        for rule in execution_bo.flow.rules:
+            # We do the check balance here
+            self.check_impact_rule_for_interval_and_account(execution_bo, rule, save_operations)
+
+        return execution_bo
+
+
+    def check_if_account_can_support_rule(
+            self,
+            interval: Interval,
+            account,
+            account_role,
+            movement_execution_bo: MovementExecutionBO
+    ) -> None:
+        """
+        Check if account can support the rule amount
+
+        Args:
+            interval: The interval to check
+            account: The account to check
+            account_role: The rule account role
+            movement_execution_bo: Movement execution business object
+
+        Raises:
+            BrokerException: If account cannot support the amount
+        """
+        # Check if account exists
+        if account is None:
+            raise BrokerException(
+                "Account with role not found",
+                "ACCOUNT_WITH_ROLE_NOT_FOUND",
+                account_role.role_identifier
+            )
+
+        # Check if the account has the required configured type
+        self.check_if_account_has_configured_type(account, account_role)
+
+        # Compute the amount to support by account
+        to_support = self.compute_amount_to_support_by_account(
+            interval,
+            movement_execution_bo.movement.amount
+        )
+
+        # Compute the total amount to support by account
+        total_amount = self.get_total_amount_to_support(
+            account.account_number,
+            to_support,
+            movement_execution_bo.total_amount_to_support_by_account
+        )
+
+        if total_amount < 0:
+            # We add the pending movement amount to the total amount
+            if account_role.role_identifier == "ISSUER":
+                total_amount -= movement_execution_bo.pending_movement_amount
+
+            # Check if the account has enough balance
+            if (account.balance.balance < abs(total_amount) and
+                    not account.is_provider() and
+                    not account.is_mirror_bank()):
+
+                # Check for overdraft possibility
+                if (account_role.role_identifier == "ISSUER" and
+                        account.overdraft_activated is True):
+
+                    logger.info(
+                        f"Doing overdraft request for account: {account.account_number}, "
+                        f"role: {account_role.role_identifier}, amount: {total_amount}"
+                    )
+
+
+                    # or
+                    #                             self.credit_digital_service.send_overdraft_request(movement_execution_bo)
+                    if (movement_execution_bo.overdraft_issued ):
+
+                        logger.info(
+                            f"Successfully done overdraft request for account: {account.account_number}, "
+                            f"role: {account_role.role_identifier}, amount: {total_amount}"
+                        )
+                        movement_execution_bo.overdraft_issued = True
+                        return
+
+                # Insufficient balance
+                raise BrokerException(
+                    "Insufficient balance",
+                    "INSUFFICIENT_BALANCE",
+                    f"{account.account_number}|{total_amount}"
+                )
+
+
+    def check_if_account_has_configured_type(self, account, account_role) -> None:
+        """
+        Check if the account has at least one of the account types configured for the given rule account role
+
+        Args:
+            account: The account to check
+            account_role: The rule account role with configured types
+
+        Raises:
+            BrokerException: If account type doesn't match configured types
+        """
+        # Check if the account has account types
+        if account.account_types is None or len(account.account_types) == 0:
+            raise BrokerException(
+                "No account type found for account",
+                "NO_ACCOUNT_TYPE_FOUND_FOR_ACCOUNT",
+                account.account_number
+            )
+
+        # Check if any account type matches the configured role types
+        for account_type in account.account_types:
+            for role_type in account_role.account_types:
+                if account_type.code == role_type:
+                    return  # an account type matches the one configured for the role, so return
+
+        # No matching account type found
+        raise BrokerException(
+            "No matching account type found for role",
+            "NO_MATCHING_ACCOUNT_TYPE_FOUND_FOR_ROLE",
+            f"{account.account_number}|{account_role.role_identifier}"
+        )
+
+
+    def compute_amount_to_support_by_account(self, interval: Interval, amount: float) -> float:
+        """
+        Compute the amount to support by account based on interval configuration
+
+        Args:
+            interval: The interval with percentage and fixed amount configuration
+            amount: The movement amount
+
+        Returns:
+            The amount to support (percentage + fixed)
+        """
+        percentage = interval.percentage if interval.percentage is not None else 0
+        fixe = interval.fixe if interval.fixe is not None else 0
+
+        return (amount * percentage / 100) + fixe
+
+
+    def get_total_amount_to_support(
+            self,
+            account_number: str,
+            to_support: float,
+            total_amount_to_support_by_account: Dict[str, float]
+    ) -> float:
+        """
+        Get or compute the total amount to support for an account
+
+        Args:
+            account_number: The account number
+            to_support: The amount to add to the total
+            total_amount_to_support_by_account: Dictionary tracking totals by account
+
+        Returns:
+            The updated total amount for this account
+        """
+        total_amount = 0.0
+
+        if account_number in total_amount_to_support_by_account:
+            total_amount = total_amount_to_support_by_account[account_number]
+
+        total_amount += to_support
+        total_amount_to_support_by_account[account_number] = total_amount
+
+        return total_amount
