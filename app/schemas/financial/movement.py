@@ -1,7 +1,10 @@
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List,Any ,Set
 from datetime import datetime
 from enum import Enum 
+
+from app.core.base_model import CamelModel
+
 
 # ============================================================================
 # CAP DTO
@@ -350,7 +353,7 @@ class TransferResponseModel(BaseModel):
 # MOVEMENT EXECUTION REQUEST
 # ============================================================================
 
-class MovementExecutionRequest(BaseModel):
+class MovementExecutionRequest(CamelModel):
     """
     Modèle de requête pour exécuter un mouvement/transaction financière
     """
@@ -550,53 +553,61 @@ class MovementExecutionRequest(BaseModel):
 # RESPONSE DETAILS
 # ============================================================================
 
-class ResponseDetails(BaseModel):
-    """
-    Informations de réponse détaillées contenant les codes de statut, 
-    messages et détails d'erreur
-    """
+# class ResponseDetails(CamelModel):
+#     """
+#     Informations de réponse détaillées contenant les codes de statut, 
+#     messages et détails d'erreur
+#     """
     
-    code: str = Field(
-        ...,
-        description="Response code indicating the result of the operation",
-        example="200"
-    )
+#     code: str = Field(
+#         ...,
+#         description="Response code indicating the result of the operation",
+#         example="200"
+#     )
     
-    status: Optional[StatusEnum] = Field(
-        None,
-        description="Status of the operation",
-        example="SUCCESS"
-    )
+#     status: Optional[StatusEnum] = Field(
+#         None,
+#         description="Status of the operation",
+#         example="SUCCESS"
+#     )
     
-    message: str = Field(
-        ...,
-        description="Human-readable message describing the result",
-        example="Transaction completed successfully"
-    )
+#     message: str = Field(
+#         ...,
+#         description="Human-readable message describing the result",
+#         example="Transaction completed successfully"
+#     )
     
-    errors: Optional[List[str]] = Field(
-        None,
-        description="List of error messages if any errors occurred",
-        example=["Invalid amount", "Insufficient balance"]
-    )
+#     errors: Optional[List[str]] = Field(
+#         None,
+#         description="List of error messages if any errors occurred",
+#         example=["Invalid amount", "Insufficient balance"]
+#     )
     
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "code": "200",
-                "status": "SUCCESS",
-                "message": "Transaction completed successfully",
-                "errors": []
-            }
-        }
-    )
+#     model_config = ConfigDict(
+#         json_schema_extra={
+#             "example": {
+#                 "code": "200",
+#                 "status": "SUCCESS",
+#                 "message": "Transaction completed successfully",
+#                 "errors": []
+#             }
+#         }
+#     )
+
+class ResponseDetails(CamelModel):
+    """Schema for response details"""
+    code: str = Field(..., description="Response code")
+    message: str = Field(..., description="Response message/status")
+    is_error: bool = Field(False, description="Indicates if response is an error")
+    
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ============================================================================
 # MOVEMENT EXECUTION RESPONSE
 # ============================================================================
 
-class MovementExecutionResponse(BaseModel):
+class MovementExecutionResponse(CamelModel):
     """
     Modèle de réponse pour l'exécution de mouvement contenant 
     les détails de transaction et le statut
@@ -717,3 +728,114 @@ class MovementExecutionResponse(BaseModel):
         None,
         description="Transfer response details"
     ) """
+
+class MovementExecutionBO(CamelModel):
+    """
+    Business object for movement execution.
+    Python equivalent of Java MovementExecutionBO
+    """
+    
+    # Core objects
+    request: MovementExecutionRequest = Field(..., description="Movement execution request")
+    movement: Optional[Any] = Field(None, description="Movement entity")
+    response: Optional[MovementExecutionResponse] = Field(None, description="Movement execution response")
+    response_details: Optional[ResponseDetails] = Field(None, description="Response details")
+    
+    # Status and change
+    init_status: Optional[str] = Field(None, description="Initial status")
+    change: Optional[Any] = Field(None, description="Change object")
+    tag: Optional[str] = Field(None, description="Tag")
+    change_tag: Optional[str] = Field(None, description="Change tag")
+    
+    # Service, flow, and product
+    service: Optional[Any] = Field(None, description="Service entity")
+    flow: Optional[Any] = Field(None, description="Flow entity")
+    product: Optional[Any] = Field(None, description="Product entity")
+    legal_entity: Optional[Any] = Field(None, description="Legal entity")
+    service_provider: Optional[Any] = Field(None, description="Service provider")
+    
+    # User and authentication
+    kc_user: Optional[Dict[str, Any]] = Field(None, description="Keycloak user information")
+    
+    # Accounts management
+    accounts: Optional[Dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Map of account roles to Account entities"
+    )
+    flow_account_roles: Optional[Set[str]] = Field(
+        default_factory=set,
+        description="Set of account roles required by the flow"
+    )
+    
+    # Financial calculations
+    total_amount_to_support_by_account: Optional[Dict[str, float]] = Field(
+        default_factory=dict,
+        description="Map of account numbers to total amounts they must support"
+    )
+    issuer_total_impact: Optional[float] = Field(0.0, description="Total impact for issuer")
+    acquirer_total_impact: Optional[float] = Field(0.0, description="Total impact for acquirer")
+    global_charge: Optional[float] = Field(0.0, description="Total charges")
+    issuer_fees: Optional[float] = Field(0.0, description="Issuer fees")
+    acquirer_fees: Optional[float] = Field(0.0, description="Acquirer fees")
+    global_commission: Optional[float] = Field(0.0, description="Total commission")
+    issuer_commission: Optional[float] = Field(0.0, description="Issuer commission")
+    acquirer_commission: Optional[float] = Field(0.0, description="Acquirer commission")
+    pending_movement_amount: float = Field(0.0, description="Pending movement amount")
+    
+    # Operations and validation
+    can_create_operations: bool = Field(False, description="Whether operations can be created")
+    
+    # Parameters and configuration
+    partner_url_parameter: Optional[Any] = Field(None, description="Partner URL parameter")
+    
+    # Flags for processing
+    local_init: bool = Field(False, description="Whether this is a local initialization")
+    recompute_operations: bool = Field(False, description="Whether to recompute operations")
+    overdraft_issued: bool = Field(False, description="Whether overdraft was issued")
+    
+    # External service mapping
+    service_mapping: Optional[Any] = Field(None, description="Service mapping for external calls")
+    transaction_exchange: Optional[Any] = Field(None, description="Transaction exchange data")
+    
+    # Unique identifiers
+    unique_partner_dist_id_value: Optional[str] = Field(
+        None,
+        description="Unique partner distribution ID value for duplicate check"
+    )
+    
+    model_config = ConfigDict(
+        from_attributes=True,
+        arbitrary_types_allowed=True
+    )
+    
+    def get_response_from_request(self) -> MovementExecutionResponse:
+        """
+        Map the request data to a response object and include movement details.
+        Equivalent to Java's getResponseFromRequest() using Dozer mapper.
+        
+        Returns:
+            MovementExecutionResponse with data from request and movement
+        """
+        # Start with basic request data mapped to response
+        response = MovementExecutionResponse(
+            # Copy basic fields from request
+            amount=self.request.amount,
+            service_code=self.request.service_code,
+            product_code=self.request.product_code,
+            partner_id=self.request.partner_id,
+            partner_dist_id=self.request.partner_dist_id,
+            client_id=self.request.client_id,
+            callback_url=self.request.callback_url,
+            terminal_id=self.request.terminal_id,
+            user_login=self.request.user_login,
+            agent_login=self.request.agent_login,
+            reason=self.request.reason,
+            reference_bulk=self.request.reference_bulk,
+            account_roles=self.request.accounts_roles,
+            additional_informations=self.request.additional_informations,
+            legal_entity_code=self.request.legal_entity_code,
+            
+            # Add response details
+            response_details=self.response_details
+        )
+        return response

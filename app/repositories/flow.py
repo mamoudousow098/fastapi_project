@@ -1,6 +1,7 @@
 """
 Flow repository for database operations
 """
+from datetime import datetime
 from typing import List, Optional
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_
@@ -87,3 +88,71 @@ class FlowRepository:
     def exists_by_code(self, code: str) -> bool:
         """Check if flow exists by code"""
         return self.db.query(Flow).filter(Flow.code == code).first() is not None
+    
+    def find_by_service_code_and_status(
+        self, 
+        service_code: str, 
+        status: EntityState, 
+        deleted: bool = False
+    ) -> Optional[Flow]:
+        """Find flow by service code and status"""
+        return self.db.query(Flow).filter(
+            and_(
+                Flow.service_code == service_code,
+                Flow.status == status,
+                Flow.deleted == deleted
+            )
+        ).first()
+    
+    def find_by_code_and_status(
+        self, 
+        code: str, 
+        status: EntityState, 
+        deleted: bool = False
+    ) -> Optional[Flow]:
+        """Find flow by code and status"""
+        return self.db.query(Flow).filter(
+            and_(
+                Flow.code == code,
+                Flow.status == status,
+                Flow.deleted == deleted
+            )
+        ).first()
+    
+    def find_by_service_and_filters(
+        self,
+        service_code: str,
+        account_number: Optional[str],
+        product_code: Optional[str],
+        client_category: Optional[str],
+        application_date_before: datetime,
+        status: EntityState,
+        deleted: bool = False
+    ) -> Optional[Flow]:
+        """Find flow by service code and optional filters with priority"""
+        query = self.db.query(Flow).filter(
+            and_(
+                Flow.service_code == service_code,
+                Flow.application_date <= application_date_before,
+                Flow.status == status,
+                Flow.deleted == deleted
+            )
+        )
+        
+        # Apply filters
+        if account_number:
+            query = query.filter(Flow.account_number == account_number)
+        else:
+            query = query.filter(Flow.account_number.is_(None))
+        
+        if product_code:
+            query = query.filter(Flow.product_code == product_code)
+        else:
+            query = query.filter(Flow.product_code.is_(None))
+        
+        if client_category:
+            query = query.filter(Flow.client_category == client_category)
+        else:
+            query = query.filter(Flow.client_category.is_(None))
+        
+        return query.first()

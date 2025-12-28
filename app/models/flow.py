@@ -42,10 +42,10 @@ class Flow(AbstractAttributEntity):
         back_populates="flow"
     )
 
-    constraints = relationship(
+    constraints: Mapped[list["Constraint"]] = relationship(
         "Constraint",
-        cascade="all, delete-orphan",
-        back_populates="flow"
+        back_populates="flow",
+        cascade="all, delete-orphan"
     )
 
     provider = relationship(

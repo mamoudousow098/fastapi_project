@@ -27,6 +27,6 @@ class ServiceType(AbstractAttributEntity):
 
     # ✅ Utilisez la string "Constraint"
     constraints: Mapped[list["Constraint"]] = relationship(
-        "Constraint",  # ← String au lieu de classe
-        cascade="all, delete-orphan"
+        "Constraint",
+        back_populates="service_type"
     )
