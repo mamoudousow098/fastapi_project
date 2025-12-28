@@ -1,7 +1,7 @@
 from datetime import datetime
 from sqlalchemy import String, Integer, Float, DateTime, Enum, Index, Text, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import JSON
+from sqlalchemy.dialects.postgresql import JSON, JSONB
 
 from app.models.base import AbstractAttributEntity
 from app.models.enums import MovementTypeEnum
@@ -109,8 +109,13 @@ class Movement(AbstractAttributEntity):
         Enum(MovementTypeEnum, name="movement_type_enum")
     )
 
+    load_operations: Mapped[dict | None] = mapped_column(JSONB)
+    cancel_operations: Mapped[dict | None] = mapped_column(JSONB)
+    account_roles: Mapped[dict | None] = mapped_column(JSONB)
+    additional_informations: Mapped[dict | None] = mapped_column(JSONB)
+
     # JSON columns (stored as JSON in PostgreSQL)
-    load_operations: Mapped[dict | None] = mapped_column(JSON)
-    cancel_operations: Mapped[dict | None] = mapped_column(JSON)
-    account_roles: Mapped[dict | None] = mapped_column(JSON)
-    additional_informations: Mapped[dict | None] = mapped_column(JSON)
+    # load_operations: Mapped[dict | None] = mapped_column(JSON)
+    # cancel_operations: Mapped[dict | None] = mapped_column(JSON)
+    # account_roles: Mapped[dict | None] = mapped_column(JSON)
+    # additional_informations: Mapped[dict | None] = mapped_column(JSON)

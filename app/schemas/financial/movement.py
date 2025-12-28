@@ -684,11 +684,10 @@ class MovementExecutionResponse(CamelModel):
         description="Detailed response information including status and error codes"
     )
     
-    issuer_fees: Optional[float] = Field(
-        None,
+    issuer_fees: Optional[float] = Field(None,
         description="Issuer fees for the transaction or movement",
         example=500.0
-    )
+        )
     
     acquirer_fees: Optional[float] = Field(
         None,
@@ -819,6 +818,7 @@ class MovementExecutionBO(CamelModel):
         # Start with basic request data mapped to response
         response = MovementExecutionResponse(
             # Copy basic fields from request
+            gu_id=self.request.gu_id,
             amount=self.request.amount,
             service_code=self.request.service_code,
             product_code=self.request.product_code,

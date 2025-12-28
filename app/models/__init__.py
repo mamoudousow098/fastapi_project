@@ -18,6 +18,8 @@ from app.models.operation import Operation
 from app.models.product import  Product
 from app.models.service_operator import ServiceOperator
 from app.models.account_role import AccountRole
+from app.models.status import Status
+from app.models.history_mvt_status import HistoryMvtStatus
 
 __all__ = [
     #"User",
@@ -42,5 +44,7 @@ __all__ = [
     "Operation",
     "Product",
     "ServiceOperator",
-    "AccountRole"
+    "AccountRole",
+    "Status",
+    "HistoryMvtStatus"
 ]

@@ -165,8 +165,11 @@ class MovementCheckerService:
                 is_error=False
             )
             bo.local_init = True
+            bo.request.gu_id = bo.movement.gu_id
             logger.info("Movement check completed successfully")
-            
+            logger.info("gu " + bo.request.gu_id)
+            logger.info("gu " + bo.movement.gu_id)
+
         except BrokerException as e:
             logger.error(f"Broker Exception: {e}")
             self.handle_broker_exception(e, bo)
@@ -245,7 +248,8 @@ class MovementCheckerService:
         
         execution_bo.product = product
         logger.info(f"Product found: {product.code}")
-    
+
+
     def remove_issuer_or_acquirer_for_external_service(
         self, execution_bo: MovementExecutionBO
     ) -> None:
@@ -709,27 +713,27 @@ class MovementCheckerService:
 
         logger.info(f"Movement saved with ID: {bo.movement.id}")
     
-    def build_movement(self, execution_bo: MovementExecutionBO) -> Movement:
-        """Build movement entity"""
-        req = execution_bo.request
-        gu_id = req.gu_id or self.generate_uuid()
-        
-        movement = Movement(
-            gu_id=gu_id,
-            log_id=self.generate_uuid(),
-            amount=req.amount,
-            commission_base=req.amount,
-            charge_base=req.amount,
-            service_code=req.service_code,
-            product_code=req.product_code,
-            flow_code=execution_bo.flow.code if execution_bo.flow else None,
-            status_code="BK_INITIATED",
-            account_roles=req.accounts_roles,
-            legal_entity_code=execution_bo.service.legal_entity.code if execution_bo.service and execution_bo.service.legal_entity else None
-        )
-        
-        return movement
-    
+    # def build_movement(self, execution_bo: MovementExecutionBO) -> Movement:
+    #     """Build movement entity"""
+    #     req = execution_bo.request
+    #     gu_id = req.gu_id or self.generate_uuid()
+    #
+    #     movement = Movement(
+    #         gu_id=gu_id,
+    #         log_id=self.generate_uuid(),
+    #         amount=req.amount,
+    #         commission_base=req.amount,
+    #         charge_base=req.amount,
+    #         service_code=req.service_code,
+    #         product_code=req.product_code,
+    #         flow_code=execution_bo.flow.code if execution_bo.flow else None,
+    #         status_code="BK_INITIATED",
+    #         account_roles=req.accounts_roles,
+    #         legal_entity_code=execution_bo.service.legal_entity.code if execution_bo.service and execution_bo.service.legal_entity else None
+    #     )
+    #
+    #     return movement
+    #
     def check_if_same_movement_initiated_in_last_mn(
         self, execution_bo: MovementExecutionBO
     ) -> None:
@@ -1042,3 +1046,223 @@ class MovementCheckerService:
         total_amount_to_support_by_account[account_number] = total_amount
 
         return total_amount
+
+    
+    
+    def build_movement(self, execution_bo: MovementExecutionBO) -> Movement:
+        """
+        Build movement entity from execution business object
+        
+        Args:
+            execution_bo: Movement execution business object
+            
+        Returns:
+            Movement entity ready to be saved
+        """
+        req = execution_bo.request
+    
+        # Generate GU_ID if not provided
+        gu_id = req.gu_id or self.generate_uuid()
+    
+        # Get partner_id based on service scope
+        partner_id = None
+        if (req.partner_id and
+                execution_bo.service and
+                execution_bo.service.scope and
+                execution_bo.service.scope == "INTERNAL"):
+            partner_id = req.partner_id
+    
+        # Get reference_bulk from transfer request or directly
+        # reference_bulk = None
+        # if req.transfer_request_model and hasattr(req.transfer_request_model, 'reference_bulk'):
+        #     reference_bulk = req.transfer_request_model.reference_bulk
+        # elif hasattr(req, 'reference_bulk'):
+        #     reference_bulk = req.reference_bulk
+    
+        # Build the movement
+        movement = Movement(
+            # Identifiers
+            gu_id=gu_id,
+            log_id=self.generate_uuid(),
+            partner_id=partner_id or req.partner_id if hasattr(req, 'partner_id') else None,
+            partner_dist_id=req.partner_dist_id if hasattr(req, 'partner_dist_id') else None,
+            client_id=req.client_id if hasattr(req, 'client_id') else None,
+    
+            # Flow information
+            flow_code=execution_bo.flow.code if execution_bo.flow else None,
+            flow_version=execution_bo.flow.version if execution_bo.flow else None,
+    
+            # Amount and bases
+            amount=req.amount,
+            commission_base=req.amount,
+            charge_base=req.amount,
+    
+            # Service information
+            service_code=req.service_code,
+            service_label=execution_bo.service.label if execution_bo.service else None,
+            service_type_code=(execution_bo.service.service_type.code
+                               if execution_bo.service and execution_bo.service.service_type else None),
+            product_code=req.product_code if hasattr(req, 'product_code') else None,
+    
+            # Legal entity and location
+            legal_entity_code=(execution_bo.service.legal_entity.code
+                               if execution_bo.service and execution_bo.service.legal_entity
+                               else req.legal_entity_code if hasattr(req, 'legal_entity_code') else None),
+            country_iso_code=(execution_bo.legal_entity.country.iso_code
+                              if execution_bo.legal_entity and execution_bo.legal_entity.country else None),
+            bank_code=req.bank_code if hasattr(req, 'bank_code') else None,
+    
+            # Geographic information
+            latitude=req.latitude if hasattr(req, 'latitude') else None,
+            longitude=req.longitude if hasattr(req, 'longitude') else None,
+    
+            # User information
+            user_login=req.user_login if hasattr(req, 'user_login') else None,
+            agent_login=req.agent_login if hasattr(req, 'agent_login') else None,
+            user_agent=req.user_agent if hasattr(req, 'user_agent') else None,
+    
+            # Terminal and merchant
+            terminal_id=req.terminal_id if hasattr(req, 'terminal_id') else None,
+            merchant_code=self._get_merchant_code(execution_bo),
+    
+            # Account information
+            account_roles=req.accounts_roles if hasattr(req, 'accounts_roles') else None,
+            issuer_account=self.get_issuer_account(execution_bo),
+            acquirer_account=self.get_acquirer_account(execution_bo),
+            issuer_account_label=self._get_issuer_account_label(execution_bo),
+            acquirer_account_label=self._get_acquirer_account_label(execution_bo),
+            super_issuer=self._get_super_issuer(execution_bo),
+            super_acquirer=self._get_super_acquirer(execution_bo),
+    
+            # Status
+            status_code=(execution_bo.init_status
+                         if execution_bo.init_status else "BK_INITIATED"),
+    
+            # References and additional info
+            #reference_bulk=reference_bulk,
+            slip_number=req.slip_number if hasattr(req, 'slip_number') else None,
+            callback_url=req.callback_url if hasattr(req, 'callback_url') else None,
+            reason=req.reason if hasattr(req, 'reason') else None,
+    
+            # Tags
+            tag=execution_bo.tag if hasattr(execution_bo, 'tag') else None,
+            change_tag=execution_bo.change_tag if hasattr(execution_bo, 'change_tag') else None,
+    
+            # Operator and movement type
+            operator=(execution_bo.service.operator.short_code
+                      if execution_bo.service and execution_bo.service.operator else None),
+            movement_type=(execution_bo.service.service_type.movement_type
+                           if execution_bo.service and execution_bo.service.service_type and
+                              hasattr(execution_bo.service.service_type, 'movement_type')
+                           else None),
+    
+            # Other participant
+            other_participant_code=self._get_other_participant_code(execution_bo),
+    
+            # Additional informations
+            additional_informations=(req.additional_informations
+                                     if hasattr(req, 'additional_informations') else None),
+        )
+    
+        return movement
+    
+    
+    def _get_merchant_code(self, execution_bo: MovementExecutionBO) -> Optional[str]:
+        """Get merchant code from acquirer account"""
+        if (execution_bo.accounts and
+                "ACQUIRER" in execution_bo.accounts):
+            acquirer = execution_bo.accounts["ACQUIRER"]
+            return acquirer.merchant_code if hasattr(acquirer, 'merchant_code') else None
+        return None
+    
+    
+    def _get_super_acquirer(self, execution_bo: MovementExecutionBO) -> Optional[str]:
+        """Get super acquirer account number"""
+        if (execution_bo.accounts and
+                "ACQUIRER" in execution_bo.accounts):
+            acquirer = execution_bo.accounts["ACQUIRER"]
+            if hasattr(acquirer, 'account') and acquirer.account:
+                return acquirer.account.account_number
+        return None
+    
+    
+    def _get_super_issuer(self, execution_bo: MovementExecutionBO) -> Optional[str]:
+        """Get super issuer account number"""
+        if (execution_bo.accounts and
+                "ISSUER" in execution_bo.accounts):
+            issuer = execution_bo.accounts["ISSUER"]
+            if hasattr(issuer, 'account') and issuer.account:
+                return issuer.account.account_number
+        return None
+    
+    
+    def _get_issuer_account_label(self, execution_bo: MovementExecutionBO) -> Optional[str]:
+        """Get issuer account label"""
+        if (execution_bo.accounts and
+                "ISSUER" in execution_bo.accounts):
+            issuer = execution_bo.accounts["ISSUER"]
+            return issuer.label if hasattr(issuer, 'label') else None
+        return None
+    
+    
+    def _get_acquirer_account_label(self, execution_bo: MovementExecutionBO) -> Optional[str]:
+        """Get acquirer account label"""
+        if (execution_bo.accounts and
+                "ACQUIRER" in execution_bo.accounts):
+            acquirer = execution_bo.accounts["ACQUIRER"]
+            return acquirer.label if hasattr(acquirer, 'label') else None
+        return None
+    
+    
+    def _get_other_participant_code(self, execution_bo: MovementExecutionBO) -> Optional[str]:
+        """Get other participant code (implement based on your business logic)"""
+        # This should be implemented based on your specific business rules
+        # for determining the other participant code
+        return None
+    
+    
+    def get_issuer_account(self, execution_bo: MovementExecutionBO) -> Optional[str]:
+        """
+        Get issuer account identifier from execution BO
+        
+        Args:
+            execution_bo: Movement execution business object
+            
+        Returns:
+            Issuer account identifier (account number or phone)
+        """
+        if not execution_bo.accounts:
+            return None
+    
+        if "ISSUER" in execution_bo.accounts:
+            issuer = execution_bo.accounts["ISSUER"]
+            if hasattr(issuer, 'account_number') and issuer.account_number:
+                return issuer.account_number
+            elif hasattr(issuer, 'phone_number') and issuer.phone_number:
+                return issuer.phone_number
+    
+        return None
+    
+    
+    def get_acquirer_account(self, execution_bo: MovementExecutionBO) -> Optional[str]:
+        """
+        Get acquirer account identifier from execution BO
+        
+        Args:
+            execution_bo: Movement execution business object
+            
+        Returns:
+            Acquirer account identifier (account number or phone)
+        """
+        if not execution_bo.accounts:
+            return None
+    
+        if "ACQUIRER" in execution_bo.accounts:
+            acquirer = execution_bo.accounts["ACQUIRER"]
+            if hasattr(acquirer, 'account_number') and acquirer.account_number:
+                return acquirer.account_number
+            elif hasattr(acquirer, 'phone_number') and acquirer.phone_number:
+                return acquirer.phone_number
+    
+        return None
+    

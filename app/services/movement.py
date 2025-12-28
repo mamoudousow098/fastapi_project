@@ -29,11 +29,48 @@ class NoStatusChangingBrokerException(BrokerException):
     pass
 
 
+# class StatusBO:
+#     """Status Business Object"""
+#     def __init__(self, code: str, message: str = None):
+#         self.code = code
+#         self.message = message or code
 class StatusBO:
     """Status Business Object"""
-    def __init__(self, code: str, message: str = None):
-        self.code = code
-        self.message = message or code
+
+    def __init__(self, status=None, code: str = None, message: str = None, label: str = None):
+        """
+        Initialize StatusBO from either a Status entity or direct parameters
+
+        Args:
+            status: Status entity (if provided, other params are ignored)
+            code: Status code
+            message: Status message
+            label: Status label
+        """
+        if status:
+            # Initialize from Status entity
+            self.id = status.id
+            self.code = status.code
+            self.label = status.label
+            self.message = status.message or status.code
+        else:
+            # Initialize from parameters
+            self.id = None
+            self.code = code
+            self.label = label
+            self.message = message or code
+
+    def __repr__(self):
+        return f"<StatusBO(code={self.code}, message={self.message})>"
+
+    def __eq__(self, other):
+        if not isinstance(other, StatusBO):
+            return False
+        return self.code == other.code
+
+    def __hash__(self):
+        return hash(self.code)
+
 
 
 class MovementService:
@@ -142,6 +179,7 @@ class MovementService:
         status: StatusBO,
         author: str,
         message: str,
+        gu_id: str,
         impact_date: Optional[datetime] = None
     ) -> None:
         """
@@ -158,23 +196,34 @@ class MovementService:
                 status=status.code,
                 message=status.message or message,
                 author=author,
-                gu_id=f"ID_{movement_id}"  # Using ID as fallback
+                #gu_id=f"ID_{movement_id}"  # Using ID as fallback
+                gu_id= gu_id # Using ID as fallback
             )
             self.db.add(history)
             
             # Update based on status
             if status.code == StatusEnum.SUCCESSFUL.value:
+                # sql = text("""
+                #     UPDATE movement
+                #     SET status_code = :status,
+                #         message = :message,
+                #         impact_date = CASE
+                #             WHEN :date IS NULL THEN NOW()
+                #             ELSE COALESCE(impact_date, :date)
+                #         END
+                #     WHERE id = :id
+                # """)
+
                 sql = text("""
                     UPDATE movement 
                     SET status_code = :status, 
                         message = :message,
-                        impact_date = CASE 
-                            WHEN :date IS NULL THEN NOW() 
-                            ELSE COALESCE(impact_date, :date)
-                        END
+                        impact_date = COALESCE(:date, NOW())
                     WHERE id = :id
                 """)
-                
+
+
+
                 self.db.execute(sql, {
                     "status": status.code,
                     "message": message,

@@ -4,10 +4,11 @@ Engine Entity Loader Service - Business logic for loading entities
 import logging
 import re
 from datetime import datetime, timedelta
-from typing import Optional, Set
+from typing import Optional, Set, Dict
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 
+from app.models import Status
 from app.models.flow import Flow
 from app.models.account import Account
 from app.models.service import Service
@@ -17,7 +18,9 @@ from app.models.country import Country
 from app.models.enums import EntityState, AccountCategory
 from app.repositories.flow import FlowRepository
 from app.repositories.account import AccountRepository
+from app.repositories.status import StatusRepository
 from app.repositories.repository import *
+from app.services.movement import StatusBO
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +37,9 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class EngineEntityLoaderService:
     """Service for loading and retrieving entities"""
-    
+
+    STATUS_MAP: Dict[str, StatusBO] = {}
+
     def __init__(self, db: Session):
         self.db = db
         self.flow_repo = FlowRepository(db)
@@ -43,6 +48,7 @@ class EngineEntityLoaderService:
         self.product_repo = ProductRepository(db)
         self.legal_entity_repo = LegalEntityRepository(db)
         self.country_repo = CountryRepository(db)
+        self.status_repository = StatusRepository(db)
         
         # Cache for status (can be implemented with Redis in production)
         self._status_cache = {}
@@ -287,3 +293,78 @@ class EngineEntityLoaderService:
         """Find provider accounts by provider ID and account types"""
         logger.info(f"Searching for provider accounts ID: {provider_id}")
         return self.account_repo.find_by_provider_and_types(provider_id, provider_account_types)
+
+    def get_status_by_code(self, status_code: str) -> Optional[StatusBO]:
+        """
+        Get status by code with caching
+
+        Args:
+            status_code: Status code to find
+
+        Returns:
+            StatusBO or None if not found
+        """
+        # Check cache first
+        if status_code in self.STATUS_MAP:
+            logger.debug(f"Status found in cache: {status_code}")
+            return self.STATUS_MAP[status_code]
+
+        # Query database
+        status = self.status_repository.find_by_code_and_deleted(status_code, deleted=False)
+
+        if status:
+            # Create StatusBO and cache it
+            status_bo = StatusBO(status)
+            self.STATUS_MAP[status_code] = status_bo
+            logger.info(f"Status loaded and cached: {status_code}")
+            return status_bo
+
+        logger.warning(f"Status not found: {status_code}")
+        return None
+
+    def get_status_by_code_or_create(self, status_code: str, label: str = None, message: str = None) -> StatusBO:
+        """
+        Get status by code, create if not exists
+
+        Args:
+            status_code: Status code
+            label: Status label (optional)
+            message: Status message (optional)
+
+        Returns:
+            StatusBO
+        """
+        status_bo = self.get_status_by_code(status_code)
+
+        if not status_bo:
+            # Create new status
+            new_status = Status(
+                code=status_code,
+                label=label or status_code,
+                message=message or status_code
+            )
+            self.status_repository.save(new_status)
+            self.db.commit()
+
+            # Cache and return
+            status_bo = StatusBO(new_status)
+            self.STATUS_MAP[status_code] = status_bo
+            logger.info(f"New status created and cached: {status_code}")
+
+        return status_bo
+
+    def clear_status_cache(self) -> None:
+        """Clear the status cache"""
+        self.STATUS_MAP.clear()
+        logger.info("Status cache cleared")
+
+    def preload_statuses(self) -> None:
+        """Preload all active statuses into cache"""
+        logger.info("Preloading statuses into cache...")
+
+        statuses = self.status_repository.find_all(deleted=False)
+        for status in statuses:
+            status_bo = StatusBO(status)
+            self.STATUS_MAP[status.code] = status_bo
+
+        logger.info(f"Preloaded {len(statuses)} statuses into cache")
