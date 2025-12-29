@@ -1,4 +1,6 @@
 from functools import lru_cache
+from typing import Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 import logging
@@ -63,6 +65,37 @@ class Settings(BaseSettings):
             f"postgresql+psycopg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
+
+    # Keycloak OAuth2 Configuration
+    KEYCLOAK_SERVER_URL: str = "https://intouchgu2-qlf.worldline-solutions.com/auth"
+    KEYCLOAK_REALM: str = "sso-intouch-iacc"
+    KEYCLOAK_CLIENT_ID: str = "agentapi"
+    KEYCLOAK_CLIENT_SECRET: str = "GlDXf5TAk8XXt6lzn1M6UGaW1MwGIXkO"
+
+    # Derived URLs
+    @property
+    def KEYCLOAK_ISSUER_URI(self) -> str:
+        return f"{self.KEYCLOAK_SERVER_URL}/realms/{self.KEYCLOAK_REALM}"
+
+    @property
+    def KEYCLOAK_JWKS_URI(self) -> str:
+        return f"{self.KEYCLOAK_ISSUER_URI}/protocol/openid-connect/certs"
+
+    @property
+    def KEYCLOAK_TOKEN_URI(self) -> str:
+        return f"{self.KEYCLOAK_ISSUER_URI}/protocol/openid-connect/token"
+
+    @property
+    def KEYCLOAK_USERINFO_URI(self) -> str:
+        return f"{self.KEYCLOAK_ISSUER_URI}/protocol/openid-connect/userinfo"
+
+    # JWT Configuration
+    JWT_ALGORITHM: str = "RS256"
+    JWT_AUDIENCE: Optional[str] = None  # Set if your tokens have an audience claim
+
+    # class Config:
+    #     env_file = ".env"
+    #     case_sensitive = True
     
     model_config = SettingsConfigDict(
         env_file=".env",

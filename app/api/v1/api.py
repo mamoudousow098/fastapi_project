@@ -1,5 +1,6 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from app.api.v1.endpoints import health, users, auth, flow, movement
+from app.core.keycloak import get_current_user
 
 api_router = APIRouter()
 
@@ -9,8 +10,15 @@ api_router.include_router(users.router, prefix="/users", tags=["Users"])
 api_router.include_router(flow.router, prefix="/flows", tags=["flows"]) 
 
 # Include movement endpoints
+# api_router.include_router(
+#     movement.router,
+#     prefix="/movement",
+#     tags=["movement"]
+# )
+
 api_router.include_router(
-    movement.router, 
-    prefix="/movement", 
-    tags=["movement"]
+    movement.router,
+    prefix="/movement",
+    tags=["movement"],
+    dependencies=[Depends(get_current_user)]  # 🔒 Secured
 )

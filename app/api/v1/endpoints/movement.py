@@ -14,7 +14,7 @@ from app.schemas.financial.movement import (
 )
 from app.services.movement_checker import MovementCheckerService
 from app.services.movement_loader import MovementLoaderService
-from app.core.security import get_user_from_token
+from app.core.security import get_user_from_token_verified
 
 # Configure logger
 logging.basicConfig(
@@ -62,7 +62,7 @@ async def initiate_movement(
     try:
         # Extract user from token
         logger.info("Extracting user from token...")
-        kc_user = get_user_from_token(authorization) if authorization else None
+        kc_user = get_user_from_token_verified(authorization) if authorization else None
         logger.info(f"User extracted: {kc_user.get('username') if kc_user else 'No user'}")
         
         # Initialize the movement checker service
@@ -115,8 +115,8 @@ async def initiate_movement(
     "/load",
     response_model=MovementExecutionResponse,
     status_code=status.HTTP_200_OK,
-    summary="Initiate a movement",
-    description="Initiates a new financial movement transaction"
+    summary="load a movement",
+    description="load an existing movement transaction"
 )
 async def load_movement(
         request: MovementExecutionRequest,
@@ -147,7 +147,7 @@ async def load_movement(
     try:
         # Extract user from token
         logger.info("Extracting user from token...")
-        kc_user = get_user_from_token(authorization) if authorization else None
+        kc_user = get_user_from_token_verified(authorization) if authorization else None
         logger.info(f"User extracted: {kc_user.get('username') if kc_user else 'No user'}")
 
         # Initialize the movement checker service
@@ -231,7 +231,7 @@ async def init_and_load_movement(
     try:
         # Extract user from token
         logger.info("Extracting user from token...")
-        kc_user = get_user_from_token(authorization) if authorization else None
+        kc_user = get_user_from_token_verified(authorization) if authorization else None
         logger.info(f"User extracted: {kc_user.get('username') if kc_user else 'No user'}")
 
         # Initialize the movement checker service
