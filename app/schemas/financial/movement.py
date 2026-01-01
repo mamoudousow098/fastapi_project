@@ -515,6 +515,20 @@ class MovementExecutionRequest(CamelModel):
         description="Partner identifier",
         example="PARTNER001"
     )
+
+    is_cancellation: Optional[bool] = Field(
+        None,
+        description="cancellation discrimination",
+        example="True"
+    )
+
+
+    gu_id_cancellation: Optional[str] = Field(
+        None,
+        description="Global Unique Identifier for the transaction",
+        example="GU123456789"
+    )
+
     
     additional_informations: Optional[Dict[str, str]] = Field(
         None,

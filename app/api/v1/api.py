@@ -9,16 +9,16 @@ api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 api_router.include_router(users.router, prefix="/users", tags=["Users"])
 api_router.include_router(flow.router, prefix="/flows", tags=["flows"]) 
 
-# Include movement endpoints
-# api_router.include_router(
-#     movement.router,
-#     prefix="/movement",
-#     tags=["movement"]
-# )
-
+#Include movement endpoints
 api_router.include_router(
     movement.router,
     prefix="/movement",
-    tags=["movement"],
-    dependencies=[Depends(get_current_user)]  # 🔒 Secured
+    tags=["movement"]
 )
+
+# api_router.include_router(
+#     movement.router,
+#     prefix="/movement",
+#     tags=["movement"],
+#     dependencies=[Depends(get_current_user)]  # 🔒 Secured
+# )

@@ -64,25 +64,112 @@ class EngineEntityLoaderService:
             deleted=False
         )
     
+    # def get_active_flow_based_on_parameters(
+    #     self,
+    #     service_code: str,
+    #     product_code: Optional[str] = None,
+    #     account_number: Optional[str] = None,
+    #     client_category: Optional[str] = None
+    # ) -> Optional[Flow]:
+    #     """
+    #     Get active flow based on parameters with fallback logic
+    #     Priority: account_number > client_category > product_code > default
+    #     """
+    #     logger.info(
+    #         f"Searching for flow :: serviceCode: {service_code} "
+    #         f"productCode: {product_code} accountNumber: {account_number}"
+    #     )
+    #
+    #     try:
+    #         current_date = datetime.now()
+    #
+    #         # 1. Try with account_number
+    #         if account_number:
+    #             flow = self.flow_repo.find_by_service_and_filters(
+    #                 service_code=service_code,
+    #                 account_number=account_number,
+    #                 product_code=None,
+    #                 client_category=None,
+    #                 application_date_before=current_date,
+    #                 status=EntityState.ACTIVE,
+    #                 deleted=False
+    #             )
+    #             if flow:
+    #                 return flow
+    #
+    #         # 2. Try with client_category
+    #         if client_category:
+    #             flow = self.flow_repo.find_by_service_and_filters(
+    #                 service_code=service_code,
+    #                 account_number=None,
+    #                 product_code=None,
+    #                 client_category=client_category,
+    #                 application_date_before=current_date,
+    #                 status=EntityState.ACTIVE,
+    #                 deleted=False
+    #             )
+    #             if flow:
+    #                 return flow
+    #
+    #         # 3. Try with product_code
+    #         if product_code:
+    #             flow = self.flow_repo.find_by_service_and_filters(
+    #                 service_code=service_code,
+    #                 account_number=None,
+    #                 product_code=product_code,
+    #                 client_category=None,
+    #                 application_date_before=current_date,
+    #                 status=EntityState.ACTIVE,
+    #                 deleted=False
+    #             )
+    #             if flow:
+    #                 return flow
+    #
+    #         # 4. Default flow (all NULL)
+    #         flow = self.flow_repo.find_by_service_and_filters(
+    #             service_code=service_code,
+    #             account_number=None,
+    #             product_code=None,
+    #             client_category=None,
+    #             application_date_before=current_date,
+    #             status=EntityState.ACTIVE,
+    #             deleted=False
+    #         )
+    #         return flow
+    #
+    #     except Exception as e:
+    #         logger.error(f"Error retrieving active flow: {e}", exc_info=True)
+    #         raise ValueError("Flow not found")
+    #
+
     def get_active_flow_based_on_parameters(
-        self,
-        service_code: str,
-        product_code: Optional[str] = None,
-        account_number: Optional[str] = None,
-        client_category: Optional[str] = None
-    ) -> Optional[Flow]:
+            self,
+            service_code: str,
+            product_code: Optional[str] = None,
+            account_number: Optional[str] = None,
+            client_category: Optional[str] = None,
+            is_cancellation: bool = False
+        ) -> Optional[Flow]:
         """
-        Get active flow based on parameters with fallback logic
-        Priority: account_number > client_category > product_code > default
+            Get active flow based on parameters with fallback logic
+            Priority: account_number > client_category > product_code > default
+
+            Args:
+                service_code: Service code to search for
+                product_code: Optional product code
+                account_number: Optional account number
+                client_category: Optional client category
+                is_cancellation: True for cancellation flows, False for normal flows
         """
         logger.info(
             f"Searching for flow :: serviceCode: {service_code} "
-            f"productCode: {product_code} accountNumber: {account_number}"
+            f"productCode: {product_code} accountNumber: {account_number} "
+            f"clientCategory: {client_category} isCancellation: {is_cancellation}"
         )
-        
+
         try:
             current_date = datetime.now()
-            
+
             # 1. Try with account_number
             if account_number:
                 flow = self.flow_repo.find_by_service_and_filters(
@@ -90,13 +177,15 @@ class EngineEntityLoaderService:
                     account_number=account_number,
                     product_code=None,
                     client_category=None,
+                    is_cancellation=is_cancellation,
                     application_date_before=current_date,
                     status=EntityState.ACTIVE,
                     deleted=False
                 )
                 if flow:
+                    logger.info(f"Flow found by account_number: {flow.code}")
                     return flow
-            
+
             # 2. Try with client_category
             if client_category:
                 flow = self.flow_repo.find_by_service_and_filters(
@@ -104,13 +193,15 @@ class EngineEntityLoaderService:
                     account_number=None,
                     product_code=None,
                     client_category=client_category,
+                    is_cancellation=is_cancellation,
                     application_date_before=current_date,
                     status=EntityState.ACTIVE,
                     deleted=False
                 )
                 if flow:
+                    logger.info(f"Flow found by client_category: {flow.code}")
                     return flow
-            
+
             # 3. Try with product_code
             if product_code:
                 flow = self.flow_repo.find_by_service_and_filters(
@@ -118,29 +209,40 @@ class EngineEntityLoaderService:
                     account_number=None,
                     product_code=product_code,
                     client_category=None,
+                    is_cancellation=is_cancellation,
                     application_date_before=current_date,
                     status=EntityState.ACTIVE,
                     deleted=False
                 )
                 if flow:
+                    logger.info(f"Flow found by product_code: {flow.code}")
                     return flow
-            
-            # 4. Default flow (all NULL)
+
+            # 4. Default flow (all NULL except service_code and is_cancellation)
             flow = self.flow_repo.find_by_service_and_filters(
                 service_code=service_code,
                 account_number=None,
                 product_code=None,
                 client_category=None,
+                is_cancellation=is_cancellation,
                 application_date_before=current_date,
                 status=EntityState.ACTIVE,
                 deleted=False
             )
+
+            if flow:
+                logger.info(f"Default flow found: {flow.code}")
+            else:
+                logger.warning(
+                    f"No flow found for service={service_code}, "
+                    f"is_cancellation={is_cancellation}"
+                )
+
             return flow
-            
+
         except Exception as e:
             logger.error(f"Error retrieving active flow: {e}", exc_info=True)
             raise ValueError("Flow not found")
-    
 
     def get_account_by_account_number_or_phone_or_merchant(
         self,

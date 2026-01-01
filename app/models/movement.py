@@ -24,6 +24,7 @@ class Movement(AbstractAttributEntity):
         Index("idx_reference_bulk", "reference_bulk"),
         Index("idx_agent_login", "agent_login"),
         Index("idx_partner_dist_id", "partner_dist_id"),
+        Index("idx_gu_id_cancellation", "gu_id_cancellation"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -113,6 +114,8 @@ class Movement(AbstractAttributEntity):
     cancel_operations: Mapped[dict | None] = mapped_column(JSONB)
     account_roles: Mapped[dict | None] = mapped_column(JSONB)
     additional_informations: Mapped[dict | None] = mapped_column(JSONB)
+    gu_id_cancellation: Mapped[str | None] = mapped_column(String, unique=True)
+
 
     # JSON columns (stored as JSON in PostgreSQL)
     # load_operations: Mapped[dict | None] = mapped_column(JSON)

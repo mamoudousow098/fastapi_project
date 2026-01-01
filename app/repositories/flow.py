@@ -1,13 +1,23 @@
 """
 Flow repository for database operations
 """
+import logging
 from datetime import datetime
 from typing import List, Optional
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_
+from sqlalchemy.sql.operators import or_
 
 from app.models.flow import Flow
 from app.models.enums import EntityState
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 
 
 class FlowRepository:
@@ -119,40 +129,140 @@ class FlowRepository:
             )
         ).first()
     
+    # def find_by_service_and_filters(
+    #     self,
+    #     service_code: str,
+    #     account_number: Optional[str],
+    #     product_code: Optional[str],
+    #     client_category: Optional[str],
+    #     application_date_before: datetime,
+    #     status: EntityState,
+    #     deleted: bool = False
+    # ) -> Optional[Flow]:
+    #     """Find flow by service code and optional filters with priority"""
+    #     query = self.db.query(Flow).filter(
+    #         and_(
+    #             Flow.service_code == service_code,
+    #             Flow.application_date <= application_date_before,
+    #             Flow.status == status,
+    #             Flow.deleted == deleted
+    #         )
+    #     )
+    #
+    #     # Apply filters
+    #     if account_number:
+    #         query = query.filter(Flow.account_number == account_number)
+    #     else:
+    #         query = query.filter(Flow.account_number.is_(None))
+    #
+    #     if product_code:
+    #         query = query.filter(Flow.product_code == product_code)
+    #     else:
+    #         query = query.filter(Flow.product_code.is_(None))
+    #
+    #     if client_category:
+    #         query = query.filter(Flow.client_category == client_category)
+    #     else:
+    #         query = query.filter(Flow.client_category.is_(None))
+    #
+    #     return query.first()
+
+
+
     def find_by_service_and_filters(
-        self,
-        service_code: str,
-        account_number: Optional[str],
-        product_code: Optional[str],
-        client_category: Optional[str],
-        application_date_before: datetime,
-        status: EntityState,
-        deleted: bool = False
+            self,
+            service_code: str,
+            account_number: Optional[str] = None,
+            product_code: Optional[str] = None,
+            client_category: Optional[str] = None,
+            is_cancellation: Optional[bool] = None,
+            application_date_before: Optional[datetime] = None,
+            status: Optional[EntityState] = None,
+            deleted: bool = False
     ) -> Optional[Flow]:
-        """Find flow by service code and optional filters with priority"""
-        query = self.db.query(Flow).filter(
-            and_(
-                Flow.service_code == service_code,
-                Flow.application_date <= application_date_before,
-                Flow.status == status,
-                Flow.deleted == deleted
-            )
+        """
+        Find flow by service code and optional filters
+
+        Args:
+            service_code: Required service code
+            account_number: Optional account number filter
+            product_code: Optional product code filter
+            client_category: Optional client category filter
+            is_cancellation: Optional cancellation flag filter
+                - True: Find only cancellation flows
+                - False: Find only normal flows
+                - None: Find flows where is_cancellation is False or NULL
+            application_date_before: Find flows with application_date <= this date
+            status: Optional status filter
+            deleted: Filter by deleted flag
+        """
+        logger.info(
+            f"Repository search :: service={service_code}, "
+            f"account={account_number}, product={product_code}, "
+            f"category={client_category}, is_cancellation={is_cancellation}"
         )
-        
-        # Apply filters
-        if account_number:
+
+        query = self.db.query(Flow).filter(
+            Flow.service_code == service_code,
+            Flow.deleted == deleted
+        )
+
+        # Filter by account_number (NULL or matching)
+        if account_number is not None:
             query = query.filter(Flow.account_number == account_number)
         else:
             query = query.filter(Flow.account_number.is_(None))
-        
-        if product_code:
+
+        # Filter by product_code (NULL or matching)
+        if product_code is not None:
             query = query.filter(Flow.product_code == product_code)
         else:
             query = query.filter(Flow.product_code.is_(None))
-        
-        if client_category:
+
+        # Filter by client_category (NULL or matching)
+        if client_category is not None:
             query = query.filter(Flow.client_category == client_category)
         else:
             query = query.filter(Flow.client_category.is_(None))
-        
-        return query.first()
+
+        # Filter by is_cancellation
+        if is_cancellation is True:
+            # Explicitly looking for cancellation flows
+            query = query.filter(Flow.is_cancellation == True)
+        elif is_cancellation is False:
+            # Explicitly looking for normal flows (False or NULL)
+            query = query.filter(
+                or_(
+                    Flow.is_cancellation == False,
+                    Flow.is_cancellation.is_(None)
+                )
+            )
+        elif is_cancellation is None:
+            # Default behavior: exclude cancellation flows
+            query = query.filter(
+                or_(
+                    Flow.is_cancellation == False,
+                    Flow.is_cancellation.is_(None)
+                )
+            )
+
+        # Filter by application_date
+        if application_date_before:
+            query = query.filter(Flow.application_date <= application_date_before)
+
+        # Filter by status
+        if status:
+            query = query.filter(Flow.status == status)
+
+        # Order by application_date descending to get most recent
+        query = query.order_by(Flow.application_date.desc())
+
+        flow = query.first()
+
+        if flow:
+            logger.info(f"Flow found: {flow.code} (is_cancellation={flow.is_cancellation})")
+        else:
+            logger.info("No flow found matching criteria")
+
+        return flow
+

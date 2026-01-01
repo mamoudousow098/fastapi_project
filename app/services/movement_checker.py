@@ -24,6 +24,7 @@ from app.schemas.financial.movement import (
     ResponseDetails
 )
 from app.services.engine_entity_loader import EngineEntityLoaderService
+from app.services.movement import MovementService
 from app.services.operation_creation import OperationCreationService
 
 # Configure logger
@@ -72,6 +73,7 @@ class MovementCheckerService:
         self.logger = logger
         self.engine_entity_loader_service = EngineEntityLoaderService(db)
         self.operation_creation_service = OperationCreationService(db)
+        self.movement_service = MovementService(db)
     
     def launch_check(self, execution_bo: Dict[str, Any]) -> MovementExecutionBO:
         """Launch all checks for a movement transaction"""
@@ -87,6 +89,11 @@ class MovementCheckerService:
         logger.info(f"User: {bo.kc_user.get('username') if bo.kc_user else 'None'}")
         
         try:
+
+            self.check_information_for_cancellation(bo)
+
+            self.check_if_movement_exists_for_cancellation(bo)
+
             logger.info("Step 1: Checking for duplicate movements")
             self.check_if_same_movement_initiated_in_last_mn(bo)
             
@@ -371,6 +378,8 @@ class MovementCheckerService:
         logger.info(f"Tag value: {getattr(execution_bo, 'tag', None)}")
         
         super_account = None
+
+
         
         # Find CORPORATE account for custom flow
         if execution_bo.accounts:
@@ -395,21 +404,46 @@ class MovementCheckerService:
             client = super_account.client
             if client:
                 client_category = getattr(client, 'client_category', None)
-        
+
+
+        # Determine if this is a cancellation request
+        is_cancellation = getattr(execution_bo.request, 'is_cancellation', False)
+
         # Find flow
         flow = self.engine_entity_loader_service.get_active_flow_based_on_parameters(
             service_code=execution_bo.service.code,
             product_code=execution_bo.request.product_code,
             account_number=account_number,
-            client_category=client_category
+            client_category=client_category,
+            is_cancellation=is_cancellation
         )
-        
+
         if not flow:
-            raise BrokerException("Flow not found", code="FLOW_NOT_FOUND")
-        
+            flow_type = "cancellation" if is_cancellation else "normal"
+            logger.error(f"Flow not found for {flow_type} operation")
+            raise BrokerException(
+                f"Flow not found for {flow_type} operation",
+                code="FLOW_NOT_FOUND"
+            )
+
         execution_bo.flow = flow
-        logger.info(f"Flow found: {flow.code}")
+        logger.info(f"Flow found: {flow.code} (cancellation={flow.is_cancellation})")
         return execution_bo
+        
+        # Find flow
+        # flow = self.engine_entity_loader_service.get_active_flow_based_on_parameters(
+        #     service_code=execution_bo.service.code,
+        #     product_code=execution_bo.request.product_code,
+        #     account_number=account_number,
+        #     client_category=client_category
+        # )
+        #
+        # if not flow:
+        #     raise BrokerException("Flow not found", code="FLOW_NOT_FOUND")
+        #
+        # execution_bo.flow = flow
+        # logger.info(f"Flow found: {flow.code}")
+        # return execution_bo
     
     def set_flow_account_roles(self, execution_bo: MovementExecutionBO) -> None:
         """Set flow account roles from rules"""
@@ -739,7 +773,39 @@ class MovementCheckerService:
     ) -> None:
         """Check for duplicates"""
         pass
-    
+
+
+    def check_if_movement_exists_for_cancellation(
+            self, execution_bo: MovementExecutionBO
+    ) -> None:
+
+        if execution_bo.request.gu_id_cancellation :
+            movement = self.movement_service.find_by_guid(execution_bo.request.gu_id_cancellation)
+            if not movement:
+                raise BrokerException(
+                    f"Movement not found for cancellation: {execution_bo.request.gu_id_cancellation}",
+                    "MOVEMENT_NOT_FOUND_FOR_CANCELLATION"
+                )
+
+            execution_bo.request.service_code = movement.service_code
+            execution_bo.request.product_code = movement.product_code
+            execution_bo.request.amount = movement.amount
+            logger.info(f"Movement retrieved for cancellation : {movement.id}")
+        else :
+            logger.info(" pass because no gu_id for cancellation ")
+
+    def check_information_for_cancellation(
+            self, execution_bo: MovementExecutionBO
+    ) -> None:
+
+
+        if (execution_bo.request.is_cancellation == True and execution_bo.request.gu_id_cancellation is None)  :
+            raise BrokerException(
+                f"give the right is information for cancellation gu_id_cancellation",
+                "MISSING_INFORMATION_FOR CANCELATION"
+            )
+
+
     def handle_broker_exception(
         self, exception: BrokerException, execution_bo: MovementExecutionBO
     ) -> None:
@@ -1083,6 +1149,7 @@ class MovementCheckerService:
         movement = Movement(
             # Identifiers
             gu_id=gu_id,
+            gu_id_cancellation = execution_bo.request.gu_id_cancellation,
             log_id=self.generate_uuid(),
             partner_id=partner_id or req.partner_id if hasattr(req, 'partner_id') else None,
             partner_dist_id=req.partner_dist_id if hasattr(req, 'partner_dist_id') else None,

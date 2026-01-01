@@ -64,6 +64,7 @@ class FlowCreate(CamelModel):
     client_category: Optional[str] = Field(None, description="Client category code")
     commission_base: Optional[CommissionBaseEnum] = Field(None, description="Commission base")
     provider: Optional[ServiceProviderSchema] = Field(None, description="Service provider")
+    create_cancellation:  Optional[bool] = Field(None, description =" For create Another with the operation")
 
     @field_validator('rules')
     @classmethod
