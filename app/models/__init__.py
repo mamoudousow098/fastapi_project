@@ -20,6 +20,10 @@ from app.models.service_operator import ServiceOperator
 from app.models.account_role import AccountRole
 from app.models.status import Status
 from app.models.history_mvt_status import HistoryMvtStatus
+from app.models.parameter import Parameter
+from app.models.service_mapping import ServiceMapping
+from app.models.account_mapping import AccountMapping
+
 
 __all__ = [
     #"User",
@@ -46,5 +50,8 @@ __all__ = [
     "ServiceOperator",
     "AccountRole",
     "Status",
-    "HistoryMvtStatus"
+    "HistoryMvtStatus",
+    "Parameter",
+    "ServiceMapping",
+    "AccountMapping"
 ]

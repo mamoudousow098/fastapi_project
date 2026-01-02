@@ -608,14 +608,73 @@ class MovementExecutionRequest(CamelModel):
 #         }
 #     )
 
+# class ResponseDetails(CamelModel):
+#     """Schema for response details"""
+#     code: str = Field(..., description="Response code")
+#     message: str = Field(..., description="Response message/status")
+#     is_error: bool = Field(False, description="Indicates if response is an error")
+#     status: str = Field(..., description="status code")
+#
+#     model_config = ConfigDict(from_attributes=True)
+#
+
 class ResponseDetails(CamelModel):
-    """Schema for response details"""
-    code: str = Field(..., description="Response code")
-    message: str = Field(..., description="Response message/status")
-    is_error: bool = Field(False, description="Indicates if response is an error")
-    
+    """
+    Schema for response details
+    Used for communicating operation results
+    All fields are optional with None as default
+    """
+
+    # Status is the main status field (SUCCESS, FAILED, PENDING, etc.)
+    status: Optional[str] = Field(None, description="Response status (SUCCESS, FAILED, PENDING, etc.)")
+
+    # Code is optional and represents a more specific error/response code
+    code: Optional[str] = Field(None, description="Specific response/error code")
+
+    # Message provides details about the response
+    message: Optional[str] = Field(None, description="Response message/details")
+
+    # Indicates if this is an error response
+    is_error: Optional[bool] = Field(None, description="Indicates if response is an error")
+
+    # Optional: List of detailed errors (for validation errors, etc.)
+    errors: Optional[List[str]] = Field(None, description="List of error messages")
+
+    # Optional: Indicates if operation is asynchronous
+    is_async: Optional[bool] = Field(None, description="Indicates if operation is async")
+
     model_config = ConfigDict(from_attributes=True)
 
+    @classmethod
+    def success(cls, message: str = "Operation successful", **kwargs):
+        """Create a success response"""
+        return cls(
+            status="SUCCESS",
+            message=message,
+            is_error=False,
+            **kwargs
+        )
+
+    @classmethod
+    def error(cls, code: str, message: str, **kwargs):
+        """Create an error response"""
+        return cls(
+            status="FAILED",
+            code=code,
+            message=message,
+            is_error=True,
+            **kwargs
+        )
+
+    @classmethod
+    def pending(cls, message: str = "Operation pending", **kwargs):
+        """Create a pending response"""
+        return cls(
+            status="PENDING",
+            message=message,
+            is_error=False,
+            **kwargs
+        )
 
 # ============================================================================
 # MOVEMENT EXECUTION RESPONSE

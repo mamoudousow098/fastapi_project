@@ -7,6 +7,8 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
+from app.models.provider import Provider
+
 logger = logging.getLogger(__name__)
 
 from app.models.flow import Flow
@@ -539,7 +541,7 @@ class FlowService:
         if flow_data.provider:
             logger.info(f"Creating service provider: {flow_data.provider.provider}")
             # Validate provider exists
-            from app.models.service_provider import Provider
+
             provider = self.db.query(Provider).filter(
                 Provider.code == flow_data.provider.provider
             ).first()
@@ -548,7 +550,7 @@ class FlowService:
                 raise ValueError(f"Provider not found for code: {flow_data.provider.provider}")
 
             service_provider = ServiceProvider(
-                provider_code=flow_data.provider.provider,
+                provider_id=provider.id,
                 url=flow_data.provider.url,
                 ranking=flow_data.provider.ranking,
                 gateway=flow_data.provider.gateway

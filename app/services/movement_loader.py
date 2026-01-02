@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.models.enums import MovementContext, ServiceScope, StatusEnum
 from app.schemas.financial.movement import MovementExecutionBO,ResponseDetails,MovementExecutionResponse,MovementExecutionRequest
+from app.services.external_call_handler import ExternalCallHandlerService
 from app.services.movement import MovementService
 from app.services.movement_checker import MovementCheckerService, NoStatusChangingBrokerException, BrokerException
 from app.services.engine_entity_loader import EngineEntityLoaderService
@@ -21,7 +22,7 @@ class MovementLoaderService:
         self.engine_entity_loader_service = EngineEntityLoaderService(db)
         self.movement_checker_service = MovementCheckerService(db)
         self.movement_service = MovementService(db)
-
+        self.external_call_handler_service = ExternalCallHandlerService(db)
 
     # def __init__(
     #         self,
@@ -89,21 +90,23 @@ class MovementLoaderService:
 
             # Handle external/PI scope services
             if execution_bo.service.scope in [ServiceScope.EXTERNAL, ServiceScope.PI]:
-                pass
+                #pass
                 # self.set_partner_dist_id(execution_bo)
-                # self.external_call_handler_service.handle_external_call(execution_bo)
+                self.external_call_handler_service.handle_external_call(execution_bo)
                 #
-                # if execution_bo.can_create_operations:
-                #     self.recompute_charge_and_commission(execution_bo)
-                #     self.do_post_success_actions(execution_bo)
-                # elif (execution_bo.response_details and
-                #       MessagesEnum.FAILED.name in execution_bo.response_details.status):
-                #     # Remove partner dist ID for retry capability
-                #     self.remove_partner_dist_id_from_temp(execution_bo.movement)
-                #     self.trigger_change_handler_for_failed_movement(
-                #         execution_bo.movement.tag,
-                #         execution_bo.movement.gu_id
-                #     )
+                if execution_bo.can_create_operations:
+                     #self.recompute_charge_and_commission(execution_bo)
+                     self.do_post_success_actions(execution_bo)
+                elif (execution_bo.response_details and
+                       "FAILED" in execution_bo.response_details.status):
+
+                    logger.info(" execution failed with ")
+                    # Remove partner dist ID for retry capability
+                    # self.remove_partner_dist_id_from_temp(execution_bo.movement)
+                    # self.trigger_change_handler_for_failed_movement(
+                    #     execution_bo.movement.tag,
+                    #     execution_bo.movement.gu_id
+                    # )
             else:
                 # Internal service - mark as successful
                 successful_status = self.engine_entity_loader_service.get_status_by_code(

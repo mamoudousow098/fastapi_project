@@ -65,14 +65,6 @@ class AccountType(AbstractAttributEntity):
     )
 
 
-class Provider(AbstractAttributEntity):
-    __tablename__ = "provider"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    code: Mapped[str | None] = mapped_column(String)
-    label: Mapped[str | None] = mapped_column(String)
-
-    accounts: Mapped[list["Account"]] = relationship("Account", back_populates="provider")
 
 
 class Balance(Base):
