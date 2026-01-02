@@ -402,7 +402,7 @@ class ExternalCallHandlerService:
                 # Default: POST to connector
                 else:
                     logger.info("Using default POST gateway")
-                    response = gateway.post_to_connector(
+                    response = self.broker_gateway.post_to_connector(
                         execution_bo.partner_url_parameter,
                         json.dumps(execution_bo.transaction_exchange.dict()),
                         execution_bo.movement.service_code
