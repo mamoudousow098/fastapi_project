@@ -4,16 +4,13 @@ Equivalent to Java HTTPUtils class
 """
 import logging
 import base64
-import ssl
 import httpx
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from app.models.parameter import Parameter
 from app.services.parameter import ParameterService
-
-#from app.exceptions import BrokerException, MessagesEnum
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +45,7 @@ class HTTPUtils:
         self._url_nombo_param: Optional[Parameter] = None
         self._url_nombo_expire: float = 0
 
-    async def post_request(
+    def post_request(
             self,
             url: str,
             body: Optional[str],
@@ -79,18 +76,18 @@ class HTTPUtils:
             headers["Authorization"] = auth
 
         # Configure proxy
-        proxies = None
+        proxy = None
         if use_proxy == 1:
-            proxies = await self._get_proxy_config(tag)
+            proxy = self._get_proxy_config(tag)
 
-        # Create HTTP client with SSL verification disabled
-        async with httpx.AsyncClient(
-                verify=False,  # Disable SSL verification (like Java's trust all certs)
-                proxy=proxies,
+        # Create SYNCHRONOUS HTTP client with SSL verification disabled
+        with httpx.Client(
+                verify=False,  # Disable SSL verification
+                proxy=proxy,
                 timeout=30.0
         ) as client:
             try:
-                response = await client.post(url, content=body, headers=headers)
+                response = client.post(url, content=body, headers=headers)
 
                 http_response = HTTPResponse(
                     code=response.status_code,
@@ -122,7 +119,7 @@ class HTTPUtils:
                 )
                 return HTTPResponse(code=None, body=None)
 
-    async def post_request_with_timeout(
+    def post_request_with_timeout(
             self,
             url: str,
             body: Optional[str],
@@ -155,18 +152,18 @@ class HTTPUtils:
             headers["Authorization"] = auth
 
         # Configure proxy
-        proxies = None
+        proxy = None
         if use_proxy == 1:
-            proxies = await self._get_proxy_config(tag)
+            proxy = self._get_proxy_config(tag)
 
-        # Create HTTP client with custom timeout
-        async with httpx.AsyncClient(
+        # Create SYNCHRONOUS HTTP client with custom timeout
+        with httpx.Client(
                 verify=False,
-                proxy=proxies,
+                proxy=proxy,
                 timeout=httpx.Timeout(timeout, connect=60.0)
         ) as client:
             try:
-                response = await client.post(url, content=body, headers=headers)
+                response = client.post(url, content=body, headers=headers)
 
                 http_response = HTTPResponse(
                     code=response.status_code,
@@ -201,7 +198,7 @@ class HTTPUtils:
                 )
                 return HTTPResponse(code=None, body=None)
 
-    async def put_request(
+    def put_request(
             self,
             url: str,
             body: Optional[str],
@@ -232,18 +229,18 @@ class HTTPUtils:
             headers["Authorization"] = auth
 
         # Configure proxy
-        proxies = None
+        proxy = None
         if use_proxy == 1:
-            proxies = await self._get_proxy_config(tag)
+            proxy = self._get_proxy_config(tag)
 
-        # Create HTTP client
-        async with httpx.AsyncClient(
+        # Create SYNCHRONOUS HTTP client
+        with httpx.Client(
                 verify=False,
-                proxy=proxies,
+                proxy=proxy,
                 timeout=30.0
         ) as client:
             try:
-                response = await client.put(url, content=body, headers=headers)
+                response = client.put(url, content=body, headers=headers)
 
                 http_response = HTTPResponse(
                     code=response.status_code,
@@ -272,7 +269,7 @@ class HTTPUtils:
                 )
                 return HTTPResponse(code=None, body=None)
 
-    async def get_request(
+    def get_request(
             self,
             url: str,
             auth: Optional[str],
@@ -301,18 +298,18 @@ class HTTPUtils:
             headers["Authorization"] = auth
 
         # Configure proxy
-        proxies = None
+        proxy = None
         if use_proxy == 1:
-            proxies = await self._get_proxy_config(tag)
+            proxy = self._get_proxy_config(tag)
 
-        # Create HTTP client
-        async with httpx.AsyncClient(
+        # Create SYNCHRONOUS HTTP client
+        with httpx.Client(
                 verify=False,
-                proxy=proxies,
+                proxy=proxy,
                 timeout=30.0
         ) as client:
             try:
-                response = await client.get(url, headers=headers)
+                response = client.get(url, headers=headers)
 
                 http_response = HTTPResponse(
                     code=response.status_code,
@@ -338,25 +335,22 @@ class HTTPUtils:
                 )
                 return HTTPResponse(code=None, body=None)
 
-    async def _get_proxy_config(self, tag: str) -> Optional[Dict[str, str]]:
-        """Get proxy configuration"""
+    def _get_proxy_config(self, tag: str) -> Optional[str]:
+        """Get proxy configuration - returns proxy URL string for httpx"""
         try:
-            proxy_host = await self.get_proxy_host()
-            proxy_port = await self.get_proxy_port()
+            proxy_host = self.get_proxy_host()
+            proxy_port = self.get_proxy_port()
 
             if proxy_host and proxy_port:
                 logger.info(f"[BROKEREME] [{tag}] ###### USING PROXY #####")
-                proxy_url = f"http://{proxy_host}:{proxy_port}"
-                return {
-                    "http://": proxy_url,
-                    "https://": proxy_url
-                }
+                # httpx.Client expects a single proxy URL string, not a dict
+                return f"http://{proxy_host}:{proxy_port}"
         except Exception as e:
             logger.error(f"[BROKEREME] [{tag}] failed getting proxy data {str(e)}")
 
         return None
 
-    async def get_proxy_host(self) -> Optional[str]:
+    def get_proxy_host(self) -> Optional[str]:
         """Get proxy host from parameters (cached)"""
         if self._proxy_host is None:
             param = self.parameter_service.get_parameter_by_code("proxy_host")
@@ -364,7 +358,7 @@ class HTTPUtils:
                 self._proxy_host = param.prm_string_value.strip()
         return self._proxy_host
 
-    async def get_proxy_port(self) -> Optional[str]:
+    def get_proxy_port(self) -> Optional[str]:
         """Get proxy port from parameters (cached)"""
         if self._proxy_port is None:
             param = self.parameter_service.get_parameter_by_code("proxy_port")
@@ -372,7 +366,7 @@ class HTTPUtils:
                 self._proxy_port = param.prm_string_value.strip()
         return self._proxy_port
 
-    async def get_nombo_param(self) -> Optional[Parameter]:
+    def get_nombo_param(self) -> Optional[Parameter]:
         """Get Nombo URL parameter (cached with expiry)"""
         if self._url_nombo_param is None or self._is_url_expired():
             logger.info("[NOMBO] param is null or the url is expired: fetching new one")
@@ -387,7 +381,7 @@ class HTTPUtils:
         time_left = self._url_nombo_expire - current_time
         return time_left < 1
 
-    async def get_api_key(self) -> Optional[Parameter]:
+    def get_api_key(self) -> Optional[Parameter]:
         """Get API key parameter (cached)"""
         if self._api_key_param is None:
             self._api_key_param = self.parameter_service.get_parameter_by_code("API_KEY_NOMBO")

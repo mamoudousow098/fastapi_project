@@ -250,7 +250,7 @@ async def init_and_load_movement(
         if response.response_details and response.response_details.code == "SUCCESS" :
             logger.info("Initializing MovementLoaderService...")
             movement_loader_service = MovementLoaderService (db)
-            execution_result = movement_loader_service.load_movement(execution_bo)
+            execution_result = movement_loader_service.load_movement(execution_result)
             # Get the response
             logger.info("Getting response from execution result...")
             response = execution_result.get_response_from_request()

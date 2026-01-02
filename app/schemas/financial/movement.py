@@ -4,6 +4,7 @@ from datetime import datetime
 from enum import Enum 
 
 from app.core.base_model import CamelModel
+from app.models import Flow
 
 
 # ============================================================================
@@ -821,7 +822,7 @@ class MovementExecutionBO(CamelModel):
     
     # Service, flow, and product
     service: Optional[Any] = Field(None, description="Service entity")
-    flow: Optional[Any] = Field(None, description="Flow entity")
+    flow: Optional[Flow] = Field(None, description="Flow entity")
     product: Optional[Any] = Field(None, description="Product entity")
     legal_entity: Optional[Any] = Field(None, description="Legal entity")
     service_provider: Optional[Any] = Field(None, description="Service provider")

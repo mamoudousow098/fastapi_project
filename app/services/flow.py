@@ -59,7 +59,7 @@ class FlowService:
             code=code,
             service_code=service_code,
             status=status_enum,
-           # is_cancellation=is_cancellation,
+            is_cancellation=is_cancellation,
             skip=page * size,
             limit=size
         )
@@ -69,7 +69,7 @@ class FlowService:
         return self.repository.get_by_code(code)
 
     def create_flow(self, flow_data: FlowCreate) -> Flow:
-        """Create a new flow with validation"""
+        """Create a new flow with validation and versioning"""
         logger.info("=" * 80)
         logger.info("Starting flow creation process")
         logger.info(f"Flow code: {flow_data.code}")
@@ -125,29 +125,44 @@ class FlowService:
             self._validate_exclusive_constraints(products, flow_data)
             logger.info("Exclusive constraints validated")
 
+            # Find existing active flow and count versions for versioning
+            logger.info("Checking for existing flows and determining version...")
+            existing_active_flow, version_count = self._find_existing_and_count(
+                service_code=service.code,
+                account_number=account.account_number if account else None,
+                product_code=products[0].code if products else None,
+                client_category=flow_data.client_category
+            )
+
+            # Generate version
+            version = f"v{version_count + 1}"
+            logger.info(f"Version for new flow: {version}")
+
+            # Inactivate existing active flow if found
+            if existing_active_flow:
+                logger.info(f"Inactivating existing active flow: {existing_active_flow.code}")
+                existing_active_flow.status = EntityState.INACTIVE
+                self.db.flush()  # Flush to database but don't commit yet
+
             # Create flows (one per product if multiple products)
             logger.info("Creating flow instances...")
             flows = []
             if products and len(products) > 1:
                 logger.info(f"Creating multiple flows for {len(products)} products")
-                # Check if flows already exist for multiple products
-                for product in products:
-                    test_code = f"{flow_data.code}_{product.code}"
-                    if self.repository.exists_by_code(test_code):
-                        logger.error(f"Flow already exists: {test_code}")
-                        raise ValueError(f"Flow with code '{test_code}' already exists")
 
                 for product in products:
                     logger.info(f"Creating flow for product: {product.code}")
                     flow = self._create_single_flow(
-                        flow_data, service, product, account, is_cancellation=False
+                        flow_data, service, product, account,
+                        is_cancellation=False, version=version
                     )
                     flows.append(flow)
             else:
                 product = products[0] if products else None
                 logger.info(f"Creating single flow with product: {product.code if product else 'None'}")
                 flow = self._create_single_flow(
-                    flow_data, service, product, account, is_cancellation=False
+                    flow_data, service, product, account,
+                    is_cancellation=False, version=version
                 )
                 flows.append(flow)
 
@@ -184,12 +199,95 @@ class FlowService:
             self.db.rollback()
             raise
 
+    # def _find_existing_and_count(
+    #         self,
+    #         service_code: str,
+    #         account_number: Optional[str],
+    #         product_code: Optional[str],
+    #         client_category: Optional[str]
+    # ) -> tuple[Optional[Flow], int]:
+    #     """
+    #     Find existing active flow and count total versions
+    #     Returns: (existing_active_flow, version_count)
+    #     """
+    #     # Priority logic: account_number > client_category > product_code > default
+    #     if account_number:
+    #         existing_flow = self.db.query(Flow).filter(
+    #             Flow.service_code == service_code,
+    #             Flow.account_number == account_number,
+    #             Flow.product_code.is_(None),
+    #             Flow.client_category.is_(None),
+    #             Flow.status == EntityState.ACTIVE,
+    #             Flow.deleted == False
+    #         ).first()
+    #
+    #         count = self.db.query(Flow).filter(
+    #             Flow.service_code == service_code,
+    #             Flow.account_number == account_number,
+    #             Flow.product_code.is_(None),
+    #             Flow.client_category.is_(None)
+    #         ).count()
+    #
+    #     elif client_category:
+    #         existing_flow = self.db.query(Flow).filter(
+    #             Flow.service_code == service_code,
+    #             Flow.account_number.is_(None),
+    #             Flow.product_code.is_(None),
+    #             Flow.client_category == client_category,
+    #             Flow.status == EntityState.ACTIVE,
+    #             Flow.deleted == False
+    #         ).first()
+    #
+    #         count = self.db.query(Flow).filter(
+    #             Flow.service_code == service_code,
+    #             Flow.account_number.is_(None),
+    #             Flow.product_code.is_(None),
+    #             Flow.client_category == client_category
+    #         ).count()
+    #
+    #     elif product_code:
+    #         existing_flow = self.db.query(Flow).filter(
+    #             Flow.service_code == service_code,
+    #             Flow.account_number.is_(None),
+    #             Flow.product_code == product_code,
+    #             Flow.client_category.is_(None),
+    #             Flow.status == EntityState.ACTIVE,
+    #             Flow.deleted == False
+    #         ).first()
+    #
+    #         count = self.db.query(Flow).filter(
+    #             Flow.service_code == service_code,
+    #             Flow.account_number.is_(None),
+    #             Flow.product_code == product_code,
+    #             Flow.client_category.is_(None)
+    #         ).count()
+    #
+    #     else:  # Default flow
+    #         existing_flow = self.db.query(Flow).filter(
+    #             Flow.service_code == service_code,
+    #             Flow.account_number.is_(None),
+    #             Flow.product_code.is_(None),
+    #             Flow.client_category.is_(None),
+    #             Flow.status == EntityState.ACTIVE,
+    #             Flow.deleted == False
+    #         ).first()
+    #
+    #         count = self.db.query(Flow).filter(
+    #             Flow.service_code == service_code,
+    #             Flow.account_number.is_(None),
+    #             Flow.product_code.is_(None),
+    #             Flow.client_category.is_(None)
+    #         ).count()
+    #
+    #     return existing_flow, count
+
     def _create_cancellation_flows(
             self,
             flow_data: FlowCreate,
             service: Service,
             products: List[Product],
-            account: Optional[Account]
+            account: Optional[Account],
+            version: str
     ) -> List[Flow]:
         """Create cancellation flows with inverted impact rules"""
         logger.info("Creating cancellation flows with inverted rules...")
@@ -202,17 +300,101 @@ class FlowService:
         if products and len(products) > 1:
             for product in products:
                 flow = self._create_single_flow(
-                    inverted_flow_data, service, product, account, is_cancellation=True
+                    inverted_flow_data, service, product, account,
+                    is_cancellation=True, version=version
                 )
                 cancellation_flows.append(flow)
         else:
             product = products[0] if products else None
             flow = self._create_single_flow(
-                inverted_flow_data, service, product, account, is_cancellation=True
+                inverted_flow_data, service, product, account,
+                is_cancellation=True, version=version
             )
             cancellation_flows.append(flow)
 
-        return cancellation_flows
+        return
+
+    def _find_existing_and_count(
+            self,
+            service_code: str,
+            account_number: Optional[str],
+            product_code: Optional[str],
+                client_category: Optional[str]
+        ) -> tuple[Optional[Flow], int]:
+        """
+            Find existing active flow and count total versions
+            Returns: (existing_active_flow, version_count)
+            """
+        # Priority logic: account_number > client_category > product_code > default
+        if account_number:
+            existing_flow = self.db.query(Flow).filter(
+                Flow.service_code == service_code,
+                Flow.account_number == account_number,
+                Flow.product_code.is_(None),
+                Flow.client_category.is_(None),
+                Flow.status == EntityState.ACTIVE,
+                Flow.deleted == False
+            ).first()
+
+            count = self.db.query(Flow).filter(
+                Flow.service_code == service_code,
+                Flow.account_number == account_number,
+                Flow.product_code.is_(None),
+                Flow.client_category.is_(None)
+            ).count()
+
+        elif client_category:
+            existing_flow = self.db.query(Flow).filter(
+                Flow.service_code == service_code,
+                Flow.account_number.is_(None),
+                Flow.product_code.is_(None),
+                Flow.client_category == client_category,
+                Flow.status == EntityState.ACTIVE,
+                Flow.deleted == False
+            ).first()
+
+            count = self.db.query(Flow).filter(
+                Flow.service_code == service_code,
+                Flow.account_number.is_(None),
+                Flow.product_code.is_(None),
+                Flow.client_category == client_category
+            ).count()
+
+        elif product_code:
+            existing_flow = self.db.query(Flow).filter(
+                Flow.service_code == service_code,
+                Flow.account_number.is_(None),
+                Flow.product_code == product_code,
+                Flow.client_category.is_(None),
+                Flow.status == EntityState.ACTIVE,
+                Flow.deleted == False
+            ).first()
+
+            count = self.db.query(Flow).filter(
+                Flow.service_code == service_code,
+                Flow.account_number.is_(None),
+                Flow.product_code == product_code,
+                Flow.client_category.is_(None)
+            ).count()
+
+        else:  # Default flow
+            existing_flow = self.db.query(Flow).filter(
+                Flow.service_code == service_code,
+                Flow.account_number.is_(None),
+                Flow.product_code.is_(None),
+                Flow.client_category.is_(None),
+                Flow.status == EntityState.ACTIVE,
+                Flow.deleted == False
+            ).first()
+
+            count = self.db.query(Flow).filter(
+                Flow.service_code == service_code,
+                Flow.account_number.is_(None),
+                Flow.product_code.is_(None),
+                Flow.client_category.is_(None)
+            ).count()
+
+        return existing_flow, count
 
     def _invert_flow_data(self, flow_data: FlowCreate) -> FlowCreate:
         """Create a copy of flow_data with inverted impact rule values"""
@@ -252,7 +434,7 @@ class FlowService:
 
         # Create new FlowCreate with inverted rules
         inverted_flow_data = FlowCreate(
-            code=flow_data.code+"_CANCELLATION",
+            code=flow_data.code,
             label=flow_data.label,
             service_code=flow_data.service_code,
             application_date=flow_data.application_date,
@@ -414,7 +596,8 @@ class FlowService:
             service: Service,
             product: Optional[Product],
             account: Optional[Account],
-            is_cancellation: bool = False
+            is_cancellation: bool = False,
+            version: str = "v1"
     ) -> Flow:
         """Create a single flow instance"""
         logger.info(f"Creating single flow instance (cancellation={is_cancellation})...")
@@ -429,11 +612,8 @@ class FlowService:
         flow_code = f"{service.code}#{product_code}#{account_number}#{client_category}{suffix}"
         logger.info(f"Generated flow code: {flow_code}")
 
-        # Check if flow already exists
-        existing = self.repository.get_by_code(flow_code)
-        if existing:
-            logger.error(f"Flow already exists: {flow_code}")
-            raise ValueError(f"Flow with code '{flow_code}' already exists")
+        # Note: No need to check if flow exists - we handle versioning instead
+        # Old flows are inactivated, new flows get new version
 
         # Handle application date
         if flow_data.date_format_application_date:
@@ -459,9 +639,10 @@ class FlowService:
             client_category=flow_data.client_category,
             commission_base=flow_data.commission_base,
             status=EntityState.ACTIVE,
-            is_cancellation=is_cancellation
+            is_cancellation=is_cancellation,
+            version=version  # Set version
         )
-        logger.info(f"Flow object created with code: {flow.code}")
+        logger.info(f"Flow object created with code: {flow.code}, version: {version}")
 
         # Create impact rules (inverted for cancellation)
         logger.info(f"Creating {len(flow_data.rules)} impact rules...")

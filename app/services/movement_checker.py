@@ -468,6 +468,7 @@ class MovementCheckerService:
             )
         
         if execution_bo.flow.provider.status == EntityState.ACTIVE:
+            logger.info(" service provider is active ")
             execution_bo.service_provider = execution_bo.flow.provider
     
     def find_provider_accounts(self, execution_bo: MovementExecutionBO) -> None:
@@ -578,14 +579,17 @@ class MovementCheckerService:
         self, execution_bo: MovementExecutionBO
     ) -> None:
         """Set EME and principal distributor accounts"""
+
+        logger.info(" flow account roles " + str(execution_bo.flow_account_roles))
+
         # EME account
         if EME in execution_bo.flow_account_roles:
             issuer = execution_bo.accounts.get(ISSUER_ACCOUNT_ROLE)
             acquirer = execution_bo.accounts.get(ACQUIRER_ACCOUNT_ROLE)
             
-            if issuer and hasattr(issuer, 'EME_account_number') and issuer.EME_account_number:
+            if issuer and hasattr(issuer, 'eme_account_number') and issuer.eme_account_number:
                 self.set_eme_account_from_code(execution_bo, ISSUER_ACCOUNT_ROLE)
-            elif acquirer and hasattr(acquirer, 'EME_account_number') and acquirer.EME_account_number:
+            elif acquirer and hasattr(acquirer, 'eme_account_number') and acquirer.eme_account_number:
                 self.set_eme_account_from_code(execution_bo, ACQUIRER_ACCOUNT_ROLE)
         
         # Principal distributor account
@@ -606,7 +610,7 @@ class MovementCheckerService:
         self, execution_bo: MovementExecutionBO, account_role: str
     ) -> None:
         """Set EME account"""
-        eme_account_number = execution_bo.accounts[account_role].EME_account_number
+        eme_account_number = execution_bo.accounts[account_role].eme_account_number
         
         eme_account = self.engine_entity_loader_service.get_account_by_account_number_or_phone_or_merchant(
             eme_account_number, execution_bo.service

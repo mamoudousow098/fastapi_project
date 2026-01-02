@@ -5,6 +5,8 @@ Equivalent to Java BrokerGateway class
 import logging
 from typing import Optional
 
+from sqlalchemy.orm import Session
+
 from app.models.parameter import Parameter
 from app.services.parameter import ParameterService
 from app.utils.http_utils import HTTPUtils, HTTPResponse
@@ -22,11 +24,11 @@ class BrokerGateway:
     _connector_login: Optional[str] = None
     _connector_password: Optional[str] = None
 
-    def __init__(self, parameter_service: ParameterService):
-        self.parameter_service = parameter_service
-        self.http_utils = HTTPUtils(parameter_service)
+    def __init__(self, db : Session):
+        self.parameter_service = ParameterService(db)
+        self.http_utils = HTTPUtils(self.parameter_service)
 
-    async def post_to_connector(
+    def post_to_connector(
             self,
             url: Parameter,
             body: str,
@@ -45,12 +47,12 @@ class BrokerGateway:
         """
         try:
             # Get credentials and build auth header
-            login = await self.get_connector_login()
-            password = await self.get_connector_password()
+            login =  self.get_connector_login()
+            password =  self.get_connector_password()
             basic_auth = f"Basic {HTTPUtils.encode_auth(login, password)}"
 
             # Make POST request with timeout
-            return await self.http_utils.post_request_with_timeout(
+            return  self.http_utils.post_request_with_timeout(
                 url=url.prm_string_value,
                 body=body,
                 auth=basic_auth,
@@ -61,7 +63,7 @@ class BrokerGateway:
             logger.error(f"An error occurred while calling connector :: {str(e)}", exc_info=True)
             return None
 
-    async def get_to_connector(
+    def get_to_connector(
             self,
             url: Parameter,
             context: str,
@@ -80,15 +82,15 @@ class BrokerGateway:
         """
         try:
             # Get credentials and build auth header
-            login = await self.get_connector_login()
-            password = await self.get_connector_password()
+            login =  self.get_connector_login()
+            password =  self.get_connector_password()
             basic_auth = f"Basic {HTTPUtils.encode_auth(login, password)}"
 
             # Build full URL
             full_url = url.prm_string_value + context
 
             # Make GET request
-            return await self.http_utils.get_request(
+            return  self.http_utils.get_request(
                 url=full_url,
                 auth=basic_auth,
                 use_proxy=url.prm_value,
@@ -98,7 +100,7 @@ class BrokerGateway:
             logger.error(f"An error occurred while calling connector :: {str(e)}", exc_info=True)
             return None
 
-    async def put_to_connector(
+    def put_to_connector(
             self,
             url: Parameter,
             body: str,
@@ -117,12 +119,12 @@ class BrokerGateway:
         """
         try:
             # Get credentials and build auth header
-            login = await self.get_connector_login()
-            password = await self.get_connector_password()
+            login =  self.get_connector_login()
+            password =  self.get_connector_password()
             basic_auth = f"Basic {HTTPUtils.encode_auth(login, password)}"
 
             # Make PUT request
-            return await self.http_utils.put_request(
+            return  self.http_utils.put_request(
                 url=url.prm_string_value,
                 body=body,
                 auth=basic_auth,
@@ -133,7 +135,7 @@ class BrokerGateway:
             logger.error(f"An error occurred while calling connector :: {str(e)}", exc_info=True)
             return None
 
-    async def post_to_product(
+    def post_to_product(
             self,
             url: str,
             body: str,
@@ -155,7 +157,7 @@ class BrokerGateway:
                 # Use proxy if not localhost
                 use_proxy = 0 if "localhost" in url else 1
 
-                return await self.http_utils.post_request(
+                return  self.http_utils.post_request(
                     url=url,
                     body=body,
                     auth=None,
@@ -166,7 +168,7 @@ class BrokerGateway:
             logger.error(f"An error occurred while calling product :: {str(e)}", exc_info=True)
             return None
 
-    async def get_connector_login(self) -> str:
+    def get_connector_login(self) -> str:
         """
         Get connector login from parameters (cached)
 
@@ -184,7 +186,7 @@ class BrokerGateway:
 
         return self._connector_login
 
-    async def get_connector_password(self) -> str:
+    def get_connector_password(self) -> str:
         """
         Get connector password from parameters (cached)
 
