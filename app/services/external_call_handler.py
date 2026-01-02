@@ -149,7 +149,7 @@ class ExternalCallHandlerService:
             else:
                 logger.info(f"Won't call partner for transaction :: {execution_bo.request.gu_id}")
                 raise BrokerException(
-                    MessagesEnum.SERVICE_URL_NOT_FOUND,
+                    "SERVICE_URL_NOT_FOUND",
                     f"Service URL not found for service code: {execution_bo.movement.service_code}"
                 )
         else:
@@ -164,7 +164,7 @@ class ExternalCallHandlerService:
 
             logger.error(f"Invalid project:topic format: {execution_bo.partner_url_parameter.prm_string_value}")
             raise BrokerException(
-                MessagesEnum.INVALID_PROJECT_TOPIC_FORMAT,
+                "MessagesEnum.INVALID_PROJECT_TOPIC_FORMAT",
                 f"Invalid project:topic format for PubSub gateway"
             )
 
